@@ -2,3 +2,10 @@
 __pycache__
 apiKey.py
 country.js
+test
+TestData
+.backups
+*.gdb
+GpMessages
+ImportLog
+Index

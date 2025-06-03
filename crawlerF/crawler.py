@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import requests, time, random, multitasking, sys
+import requests, time, random, multitasking, sys, os
 from tqdm import tqdm
 from retry import retry
 
 sys.path.append(".") # Set path to the roots
-from crawler.apiKey import HEADERS, MB
+from crawlerF.apiKey import HEADERS, MB
 
 class crawler:
     __slots__ = ["url", "postData"]
@@ -54,7 +54,7 @@ class crawler:
             r = self.rget()
             return r
         
-    def download(self, savePath: str, retryTimes: int = 3, eachSize=16*MB) -> None:
+    def download(self, savePath: str, retryTimes: int = 3, eachSize: int = 16*MB, multi: bool = True) -> None:
         """
         Multitask Split downloading function
 
@@ -101,8 +101,12 @@ class crawler:
             # Release sources
             del chunks
 
+        # Whether use mutithreads
         session = requests.Session()
-        eachSize = min(eachSize, fileSize)
+        if multi:
+            eachSize = min(eachSize, fileSize)
+        else:
+            eachSize = fileSize
 
         # Split
         parts = self.__split(0, fileSize, eachSize)
@@ -142,6 +146,7 @@ class crawler:
             if raiseError is True:
                 raise ValueError("Do not support downloading!")
             return fileSize
+        
         return int(fileSize)
 
     def __staureCode(self, r: requests.Response, rtype: str) -> bool:
