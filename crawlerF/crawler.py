@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import requests, time, random, multitasking, sys, os
+import requests, time, random, multitasking, sys
 from tqdm import tqdm
 from retry import retry
 
@@ -16,43 +16,72 @@ class crawler:
         self.postData = postData
 
     def rpost(self) -> requests.Response:
-        try:
-            r = requests.post(self.url, headers=self.__headers, data = self.postData, timeout=(3,7))
-            if self.__staureCode(r, "post"):
-                r = self.rpost()
-            else:
-                return r
-        except:
-            print("Network Error")
-            time.sleep(random.randint(5,10))
-            r = self.rpost()
-            return r
+        while True:
+            try:
+                r = requests.post(self.url, headers=self.__headers, data = self.postData, timeout=(3,7))
+                if self.__staureCode(r, "post"):
+                    time.sleep(random.randint(5,10))
+                    continue
+                else:
+                    return r
+            except:
+                print("Network Error")
+                time.sleep(random.randint(5,10))
+                continue
+        
+        ## Old Recursion
+        # try:
+        #     r = requests.post(self.url, headers=self.__headers, data = self.postData, timeout=(3,7))
+        #     if self.__staureCode(r, "post"):
+        #         r = self.rpost()
+        #     else:
+        #         return r
+        # except:
+        #     print("Network Error")
+        #     time.sleep(random.randint(5,10))
+        #     r = self.rpost()
+        #     return r
     
     def rget(self, stream=False) -> requests.Response:
-        try:
-            r = requests.get(self.url, headers=self.__headers, timeout=(3,7), stream=stream)
-            if self.__staureCode(r, "get"):
-                r = self.rget()
-            else:
-                return r
-        except:
-            print("Network Error")
-            time.sleep(random.randint(5,10))
-            r = self.rget()
-            return r
+        while True:
+            try:
+                r = requests.get(self.url, headers=self.__headers, timeout=(3,7), stream=stream)
+                if self.__staureCode(r, "get"):
+                    time.sleep(random.randint(5,10))
+                    continue
+                else:
+                    return r
+            except:
+                print("Network Error")
+                time.sleep(random.randint(5,10))
+                continue
+        
+        # # Old Recursion
+        # try:
+        #     r = requests.get(self.url, headers=self.__headers, timeout=(3,7), stream=stream)
+        #     if self.__staureCode(r, "get"):
+        #         r = self.rget()
+        #     else:
+        #         return r
+        # except:
+        #     print("Network Error")
+        #     time.sleep(random.randint(5,10))
+        #     r = self.rget()
+        #     return r
     
     def head(self)  -> requests.Response:
-        try:
-            r = requests.head(self.url, headers=self.__headers, timeout=(3,7))
-            if self.__staureCode(r, "geting head"):
-                r = self.head()
-            else:
-                return r
-        except:
-            print("Network Error")
-            time.sleep(random.randint(5,10))
-            r = self.rget()
-            return r
+        while True:
+            try:
+                r = requests.head(self.url, headers=self.__headers, timeout=(3,7))
+                if self.__staureCode(r, "geting head"):
+                    time.sleep(random.randint(5,10))
+                    continue
+                else:
+                    return r
+            except:
+                print("Network Error")
+                time.sleep(random.randint(5,10))
+                continue
         
     def download(self, savePath: str, retryTimes: int = 3, eachSize: int = 16*MB, multi: bool = True) -> None:
         """
@@ -67,7 +96,7 @@ class crawler:
         No return
         """
         file = open(savePath, "wb")
-        fileSize = self.__getFileSize(self.url)
+        fileSize = self.__getFileSize()
 
         @retry(tries=retryTimes)
         @multitasking.task
@@ -103,7 +132,7 @@ class crawler:
 
         # Whether use mutithreads
         session = requests.Session()
-        if multi:
+        if multi and fileSize != 0:
             eachSize = min(eachSize, fileSize)
         else:
             eachSize = fileSize
@@ -135,7 +164,7 @@ class crawler:
         Get file Size
 
         Parameters: \n
-        raise_error : Wheter raise error when file size is not availabel.
+        raiseError : Wheter raise error when file size is not availabel.
 
         Return:
         File size (Bit)
@@ -145,7 +174,7 @@ class crawler:
         if fileSize is None:
             if raiseError is True:
                 raise ValueError("Do not support downloading!")
-            return fileSize
+            return 0
         
         return int(fileSize)
 

@@ -7,11 +7,23 @@ from bs4 import BeautifulSoup as bs
 sys.path.append(".") # Set path to the roots
 
 from crawlerF.crawler import crawler
-from function.otherFunction import mkdir
+from function.readFiles import mkdir
 
 class globalPopulation(crawler):
     __url = "https://hub.worldpop.org/ajax/geolisting/category?id=88"
     __countries = []
+    """
+    meta example:
+    [{'id': '50353',
+        'doi': '10.5258/SOTON/WP00698',
+        'popyear': '2020',
+        'date': '2020-11-30',
+        'file_img': 'dza_f_45_2020_Image.png',
+        'continent': 'Africa',
+        'country': 'Algeria',
+        'resolution': '100',
+        'type': 'Age structures'}]
+    """
     __indexC = []
 
     def __init__(self):
@@ -34,12 +46,13 @@ class globalPopulation(crawler):
 
         return
 
-    def downloadOneCountry(self, savePath: str, id: str = 0, meta: str = "", country: str = "") -> bool:
+    def downloadOneCountry(self, savePath: str, id: str = "", country: str = "") -> bool:
         # Get id by country name
-        if id == 0 and country in self.__indexC:
-            meta = self.__countries[self.__indexC.index(country)]
-            id = meta.get("id")
-        elif id == 0 and country not in self.__indexC:
+        meta = {}
+        if id == "" and country in self.__indexC:
+            meta: dict = self.__countries[self.__indexC.index(country)]
+            id = meta["id"]
+        elif id == "" and country not in self.__indexC:
             print("Country {} is not collected in worlpop".format(country))
             return False
         
@@ -52,13 +65,15 @@ class globalPopulation(crawler):
         soup = bs(r.text, "html.parser")
         div = soup.find_all("div", {"id": "files"})
         a = div[0].find_all("a", {"class": "mt-3"})
+        # Add the folder of country
+        downloadUrl0 = a[0]["href"]
+        iso = downloadUrl0.split("/") # Format see in .downloadOneCountryByISO url
+        iso = iso[-3]
+        savePath2 = os.path.join(savePath, iso)
+        mkdir(savePath2)
         for i in a:
             downloadUrl = i["href"]
-            iso = downloadUrl.split("/") # Format see in .downloadOneCountryByISO url
-            filename = iso[-1]
-            iso = iso[-3]
-            savePath2 = os.path.join(savePath, iso)
-            mkdir(savePath2)
+            filename = downloadUrl.split("/")[-1]
             # Download
             super().__init__(downloadUrl)
             self.download(os.path.join(savePath2, filename), multi=False)

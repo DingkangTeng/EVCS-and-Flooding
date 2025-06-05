@@ -5,7 +5,7 @@ sys.path.append(".") # Set path to the roots
 
 from crawlerF.crawler import crawler
 from function.constant import COUNTRYS
-from function.otherFunction import mkdir
+from function.readFiles import mkdir
 
 class globalFloodDatabase(crawler):
     __url = "https://global-flood-database.cloudtostreet.ai/"
@@ -53,7 +53,7 @@ class globalFloodDatabase(crawler):
             url = "https://storage.googleapis.com/gfd_v1_4/{}.zip".format(path[3])
             path = os.path.join(savePath, path[3] + ".zip")
             super().__init__(url)
-            self.download(path)
+            self.download(path, multi=False)
         
         return
 
