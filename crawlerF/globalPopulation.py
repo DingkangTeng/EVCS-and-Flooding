@@ -3,6 +3,7 @@
 import sys, os
 import pandas as pd
 from bs4 import BeautifulSoup as bs
+from bs4 import Tag
 
 sys.path.append(".") # Set path to the roots
 
@@ -64,15 +65,30 @@ class globalPopulation(crawler):
         # Get all population file
         soup = bs(r.text, "html.parser")
         div = soup.find_all("div", {"id": "files"})
-        a = div[0].find_all("a", {"class": "mt-3"})
+        da = div[0]
+        if not isinstance(da, Tag):
+            print("No data found for country {}".format(country))
+            return False
+        a = da.find_all("a", {"class": "mt-3"})
         # Add the folder of country
-        downloadUrl0 = a[0]["href"]
+        db = a[0]
+        if not isinstance(db, Tag):
+            print("No data found for country {}".format(country))
+            return False
+        downloadUrl0 = db["href"]
+        if downloadUrl0 is not str:
+            print("No data found for country {}".format(country))
+            return False
         iso = downloadUrl0.split("/") # Format see in .downloadOneCountryByISO url
         iso = iso[-3]
         savePath2 = os.path.join(savePath, iso)
         mkdir(savePath2)
         for i in a:
+            if not isinstance(i, Tag):
+                continue
             downloadUrl = i["href"]
+            if downloadUrl is not str:
+                continue
             filename = downloadUrl.split("/")[-1]
             # Download
             super().__init__(downloadUrl)

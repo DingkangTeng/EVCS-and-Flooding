@@ -4,7 +4,7 @@ sys.path.append(".") # Set path to the roots
 
 # Folder operation function
 ## Make a floder
-def mkdir(savePath) -> None:
+def mkdir(savePath: str) -> None:
     if not os.path.exists(savePath):
         os.mkdir(savePath)
 
