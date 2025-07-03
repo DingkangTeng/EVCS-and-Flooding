@@ -304,9 +304,9 @@ class GetOSMData:
 
         Parameters:
         path: Save path of the result, the defalut path is the root path\
-        of environment.
+            of environment.
         saveType: Chose the driver of the saving function, support GPKG, \
-        SHP and GEOJSON. The default value is GPKG. (default: `GPKG`)
+            SHP and GEOJSON. The default value is GPKG. (default: `GPKG`)
         saveName: The name of the result file, the default name is "result".
 
         Retruns:
