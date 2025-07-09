@@ -1,7 +1,7 @@
 # Country list is copied from 
 # "https://global-flood-database.cloudtostreet.ai/static/js/bundle.js"
 baseBands = 0
-COUNTRYS = [{
+COUNTRIES_GFD = [{
   "id": "AFG",
   "name": "Afghanistan",
   "bands": baseBands
@@ -791,4 +791,8 @@ COUNTRYS = [{
   "id": "ZWE",
   "name": "Zimbabwe",
   "bands": baseBands
-}];
+}]
+
+from iso3166 import countries_by_name
+COUNTRIES_ALL = countries_by_name.keys()
+print(COUNTRIES_ALL, "countries loaded")

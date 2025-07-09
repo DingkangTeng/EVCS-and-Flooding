@@ -1,13 +1,10 @@
-import sys, os, zipfile, threading, psutil, gc, shutil
-import rasterio as rio
+import sys, os, threading, gc
 import pandas as pd
-import numpy as np
 # import warp as wp
-from rasterio.io import MemoryFile
-from rasterio.merge import merge
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from typing import override
+from osgeo import gdal
 
 sys.path.append(".") # Set path to the roots
 
@@ -66,25 +63,27 @@ class populationMerge(floodingMerge):
 
         # Different countries may have overlap，so use max (union)
         bar.set_description("Merging all countries...")
-        datasets = [rio.open(fp) for fp in saved]
         bar.update(1)
-        mosaic, out_transform = merge(datasets, method="max", nodata=0)
-        bar.update(6)
-        outMeta = datasets[0].meta.copy()
-        outMeta["height"] = mosaic.shape[1]
-        outMeta["width"] = mosaic.shape[2]
-        outMeta["transform"] = out_transform
-        outMeta["nodata"] = 0
-        # Compress
-        outMeta["compress"] = "DEFLATE"
-        outMeta["zlevel"] = 9
-        outMeta["predictor"] = 2 # Flot using 3
-        outMeta["num_threads"] = "all_cpus"
-        with rio.open(os.path.join(savePath, "0_All_merge.tif"), 'w', **outMeta) as dst:
-            dst.write(mosaic)
-        for ds in datasets:
-            ds.close()
-        bar.update(3)
+        mosaic = gdal.Warp(
+            destNameOrDestDS=os.path.join(savePath, "0_All_merge.tif"),
+            srcDSOrSrcDSTab=saved,
+            format="GTiff",
+            srcSRS="EPSG:4326", # Set to WGS84
+            srcNodata=0,
+            dstSRS="EPSG:4326", # Set to WGS84
+            dstNodata=0,
+            resampleAlg=gdal.GRA_Max,
+            multithread=True,
+            creationOptions=[
+                "NUM_THREADS=ALL_CPUS",
+                "COMPRESS=DEFLATE",
+                "TILED=YES"
+                ]
+        )
+        mosaic = None
+        del mosaic
+        gc.collect()
+        bar.update(9)
         
         return
     
@@ -120,24 +119,12 @@ class populationMerge(floodingMerge):
             tqdm.write("No tif files found in {}".format(country))
             return
 
-        datasets = [rio.open(os.path.join(path, fp)) for fp in datas]
+        datasets = [os.path.join(path, fp) for fp in datas]
         if bar is None:
             tqdm.write("Mosacing {}".format(country))
         else:
             bar.set_description("Mosacing {}".format(country))
         # Estimates of total number of people per grid square broken down by gender and age groupings, therefor use sum to merge
-        mosaic, out_transform = merge(datasets, method="sum", nodata=np.nan) # Simiart to Mosaic To New Raster (Data Management) in ArcGIS
-        
-        outMeta = datasets[0].meta.copy()
-        outMeta["height"] = mosaic.shape[1]
-        outMeta["width"] = mosaic.shape[2]
-        outMeta["transform"] = out_transform
-        outMeta["nodata"] = 0
-        # Compress
-        outMeta["compress"] = "DEFLATE"
-        outMeta["zlevel"] = 9
-        outMeta["predictor"] = 3 # Int using 2, Flot using 3
-        outMeta["num_threads"] = "all_cpus"
         result = os.path.join(
             savePath, "{}_{}_{}_merge.tif".format(
                 country,
@@ -145,10 +132,25 @@ class populationMerge(floodingMerge):
                 mainAge if len(mainAge) != 18 else "allAge"
             )
         )
-        with rio.open(result, 'w', **outMeta) as dst:
-            dst.write(mosaic)
-        for ds in datasets:
-            ds.close()
+        mosaic = gdal.Warp(
+            destNameOrDestDS=result,
+            srcDSOrSrcDSTab=datasets,
+            format="GTiff",
+            srcSRS="EPSG:4326", # Set to WGS84
+            srcNodata=0,
+            dstSRS="EPSG:4326", # Set to WGS84
+            dstNodata=0,
+            resampleAlg=gdal.GRA_Sum,
+            multithread=True,
+            creationOptions=[
+                "NUM_THREADS=ALL_CPUS",
+                "COMPRESS=DEFLATE",
+                "TILED=YES"
+                ]
+        )
+        mosaic = None
+        del mosaic
+        gc.collect()
 
         # Save metadata
         metadata = pd.DataFrame({"File Names": datas})
@@ -161,5 +163,5 @@ class populationMerge(floodingMerge):
 
 if __name__ == "__main__":
     # Adjust the multi-thread number based on your computer, too much threads will cause memory overflow
-    # populationMerge(r"C:\\0_PolyU\\population\\").mergeByAge("AGO", "test")
-    populationMerge(r"C:\\0_PolyU\\population\\").mergeAll("test", multiThread=2)
+    populationMerge(r"C:\\0_PolyU\\population\\").mergeByAge("AGO", "test")
+    # populationMerge(r"C:\\0_PolyU\\population\\").mergeAll("test", multiThread=os.cpu_count() ** 0.5) # type: ignore

@@ -28,19 +28,6 @@ class crawler:
                 print("Network Error")
                 time.sleep(random.randint(5,10))
                 continue
-        
-        ## Old Recursion
-        # try:
-        #     r = requests.post(self.url, headers=self.__headers, data = self.postData, timeout=(3,7))
-        #     if self.__staureCode(r, "post"):
-        #         r = self.rpost()
-        #     else:
-        #         return r
-        # except:
-        #     print("Network Error")
-        #     time.sleep(random.randint(5,10))
-        #     r = self.rpost()
-        #     return r
     
     def rget(self, stream=False) -> requests.Response:
         while True:
@@ -55,19 +42,6 @@ class crawler:
                 print("Network Error")
                 time.sleep(random.randint(5,10))
                 continue
-        
-        # # Old Recursion
-        # try:
-        #     r = requests.get(self.url, headers=self.__headers, timeout=(3,7), stream=stream)
-        #     if self.__staureCode(r, "get"):
-        #         r = self.rget()
-        #     else:
-        #         return r
-        # except:
-        #     print("Network Error")
-        #     time.sleep(random.randint(5,10))
-        #     r = self.rget()
-        #     return r
     
     def head(self)  -> requests.Response:
         while True:

@@ -12,7 +12,7 @@ def mkdir(savePath: str) -> None:
 
 # Read files
 class readFiles:
-    __slot__ = ["path", "fileFilter", "typeFilter"]
+    __slots__ = ["path", "fileFilter", "typeFilter", "files"]
 
     def __init__(self, path: str = "", fileFilter: list[str] = [], typeFilter: list[str] = []):
         self.path = path

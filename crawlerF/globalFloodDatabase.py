@@ -4,7 +4,7 @@ from tqdm import tqdm
 sys.path.append(".") # Set path to the roots
 
 from crawlerF.crawler import crawler
-from function.constant import COUNTRYS
+from function.constant import COUNTRIES_GFD
 from function.readFiles import mkdir
 
 class globalFloodDatabase(crawler):
@@ -26,7 +26,7 @@ class globalFloodDatabase(crawler):
         return
 
     def downloadAll(self, savePath: str) -> None:
-        for country in COUNTRYS:
+        for country in COUNTRIES_GFD:
             countryID = country["id"]
             print("Downloading {} ({}).".format(country["name"], countryID))
             self.downloadOneCountry(countryID, savePath)
