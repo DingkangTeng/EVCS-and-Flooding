@@ -10,9 +10,4 @@ GpMessages
 ImportLog
 Index
 *.aprx
-/graph/.gitignore
-/graph/.git
-/graph/OSMqueryMain.py
-/graph/LICENSE
-/graph/README.md
 cache

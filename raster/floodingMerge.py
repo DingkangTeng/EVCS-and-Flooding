@@ -348,9 +348,9 @@ class floodingMerge:
 
 if __name__ == "__main__":
     # Adjust the multi-thread number based on your computer, too much threads will cause memory overflow
-    ## Only remove water bodies
-    # floodingMerge(r"C:\\0_PolyU\\flooding").readAllTifInZip("C:\\0_PolyU\\floodingAll_Times", 1, multiThread=os.cpu_count()) # type: ignore
-    floodingMerge(r"C:\\0_PolyU\\flooding").calculateStasticPeriod("C:\\0_PolyU\\flooding")
+    # Only remove water bodies
+    floodingMerge(r"C:\\0_PolyU\\flooding2").readAllTifInZip("C:\\0_PolyU\\floodingAll_Days", 2, multiThread=os.cpu_count()) # type: ignore
+    # floodingMerge(r"C:\\0_PolyU\\flooding").calculateStasticPeriod("C:\\0_PolyU\\flooding")
     ## gdal.Warp have some problems and will not merge all files correctly
     # floodingMerge(r"C:\\0_PolyU\\flooding").mergeOneCountry("CHN", "test", 2, multiThread=os.cpu_count()) # type: ignore
     # floodingMerge(r"C:\\0_PolyU\\flooding").mergeAll("C:\\0_PolyU\\floodingAll\\mergeByCountry", 2, multiThread=os.cpu_count() ** 0.5) # type: ignore

@@ -3,6 +3,7 @@ import osmnx as ox
 import networkx as nx
 import pandas as pd
 from iso3166 import countries_by_name
+from iso3166 import countries as COUNTRIES
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -29,20 +30,43 @@ class getSimpleRoad:
                 )
         )
 
-    def getAllCountriesNetworksGraph(self, savePath: str, customFilter: str | None = None, multiThread: int = 0) -> None:
+    def getAllCountriesNetworksGraph(
+        self,
+        savePath: str,
+        countries: set[str] | list[str] = set(),
+        customFilter: str | None = None,
+        multiThread: int = 0
+    ) -> None:
         """
         Get all countries networks graph and save to geopackage
-        :param savePath: The path to save the geopackage
+
+        Parameters:
+        savePath: The path to save the geopackage files.
+        countries: A set or list of country names to process. If empty, all countries will be processed.
+        customFilter: A custom filter for the OSMnx graph query. Default is None.
+        multiThread: The number of threads to use for processing. Default is `0`, which means using the maximum threads based on memory size.
+
+        Return:
+        No return.
+        
+        This function will create a directory at `savePath` if it does not exist, and save each country's network graph as a geopackage file \
+            with ISO-3166 alapha 3 code.
+        If a country's geopackage file already exists in the `savePath`, it will be skipped.
+        If an error occurs while processing a country, it will be logged in `exceptionCountry.csv` in the `savePath`.
+        The `exceptionCountry.csv` will contain the country name, the number of exceptions, and the exception messages.
         """
         if multiThread == 0:
             multiThread = self.__maxThread
 
-        allCountries = set(countries_by_name.keys())
+        if countries == set():
+            allCountries = set(countries_by_name.keys()) # All upper
+            # Exclude the countries that are already exist in the save path
+            existingFiles = readFiles(savePath).specifcFile(suffix=["gpkg"])
+            existingCountries = set([COUNTRIES.get(f.split(".")[0]).name.upper() for f in existingFiles])
+            allCountries = allCountries - existingCountries
+        else:
+            allCountries = set(countries)
         mkdir(savePath)  # Create the save path if not exists
-        # Exclude the countries that are already exist in the save path
-        existingFiles = readFiles(savePath).specifcFile(suffix=["gpkg"])
-        existingCountries = set([f.split(".")[0] for f in existingFiles])
-        allCountries = allCountries - existingCountries
 
         # Progress bar
         bar = tqdm(total=len(allCountries) * 2, desc="Processing countries", unit="country")
@@ -94,7 +118,7 @@ class getSimpleRoad:
         else:
             multiThread[0].set_description("Processing country: {}".format(PN))
             multiThread[0].update(1)
-        iso3 = countries_by_name[PN].alpha3
+        iso3 = countries_by_name[PN].alpha3 if PN in countries_by_name else PN
         
         exceptionTimes = 0
         exceptionCountry = ["", 0, []]
@@ -150,7 +174,7 @@ if __name__ == "__main__":
         [\"highway\"~\"^motorway$|^trunk$|^primary$|^secondary$|^tertiary$|^motorway_link$| \
         ^trunk_link$|^primary_link$|^secondary_link$|^tertiary_link$\"] \
     "
-    getSimpleRoad().getAllCountriesNetworksGraph("test", customFilter, multiThread=os.cpu_count()) # type: ignore
+    getSimpleRoad().getAllCountriesNetworksGraph("test", customFilter=customFilter, multiThread=os.cpu_count()) # type: ignore
 
     # Following steps are not implemented yet
     # Nodes -> Tissen polygons -> connect nodes with EVCS and population
