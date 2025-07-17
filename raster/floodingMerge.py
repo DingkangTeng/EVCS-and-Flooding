@@ -49,63 +49,6 @@ class floodingMerge:
                 self.__maxThread
                 )
         )
-        
-    def mergeAll(self, savePath: str, mainBand: int, multiThread: int = 0) -> None:
-        countries = readFiles(self.path).allFolder()
-        saved = [] # Save path for all countries
-        n = len(countries)
-        i = 1
-        if multiThread == 0:
-            multiThread = self.__maxThread
-
-        # A thread-safe way to append results
-        savedLock = threading.Lock()
-        def subThread(country: str, i: int, n: int, saved: list[str], savedLock: threading.Lock) -> None:
-            tqdm.write("Processing {} ({}/{})".format(country, i, n))
-            result = self.mergeOneCountry(country, savePath, mainBand)
-            if result is not None:
-                with savedLock:
-                    saved.append(result)
-
-            return
-
-        futures = []
-        futuresToCountry = {} # Store futures to country mapping for debugging
-        excutor = ThreadPoolExecutor(max_workers=multiThread)
-        for country in countries:
-            future = excutor.submit(subThread, country, i, n, saved, savedLock)
-            futures.append(future)
-            futuresToCountry[future] = country
-            i += 1
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                tqdm.write("Error in merge country {}: {}".format(futuresToCountry[future], e))
-
-        # Different countries may have overlap，so use max (union)
-        tqdm.write("Merging all countries...")
-        mosaic = gdal.Warp(
-            destNameOrDestDS=os.path.join(savePath, "0_All_merge.tif"),
-            srcDSOrSrcDSTab=saved,
-            format="GTiff",
-            srcSRS="EPSG:4326", # Set to WGS84
-            srcNodata=0,
-            dstSRS="EPSG:4326", # Set to WGS84
-            dstNodata=0,
-            resampleAlg=gdal.GRA_Max,
-            multithread=True,
-            creationOptions=[
-                "NUM_THREADS=ALL_CPUS",
-                "COMPRESS=DEFLATE",
-                "TILED=YES"
-                ]
-        )
-        mosaic = None # Clean data
-        del mosaic
-        gc.collect()
-        
-        return
 
     def readAllTifInZip(self, savePath: str, mainBand: int, multiThread: int = 0) -> None:
         countries = readFiles(self.path).allFolder()
@@ -162,82 +105,6 @@ class floodingMerge:
                 tqdm.write("Error in merge country {}: {}".format(country, e))
 
         return
-
-    def mergeOneCountry(self, country: str, savePath: str, mainBand: int, multiThread: int = 0) -> str | None:
-        path = os.path.join(self.path, country)
-        tmpPath = os.path.join(path, "tmp")
-        result = os.path.join(savePath, "{}_merge.tif".format(country))
-        mkdir(savePath)
-        mkdir(tmpPath)
-        if multiThread == 0:
-            multiThread = self.__maxThread
-
-        files = readFiles(path).specifcFile(suffix=["zip"])
-        n = len(files)
-        if n == 0:
-            tqdm.write("No tif files found in {}".format(country))
-            return
-        
-        datas = []
-        datasLock = threading.Lock()
-        bar = tqdm(total=n+10, desc="Starting", postfix=country)
-        
-        futures = []
-        excutor = ThreadPoolExecutor(max_workers=multiThread)
-        for file in files:
-            bar.set_description("Removing permanent water bodies ({} files)".format(n))
-            zipPath = os.path.join(path, file)
-            z = zipfile.ZipFile(zipPath, 'r')
-            tifs = [x for x in z.namelist() if x.split('.')[-1] == "tif"]
-            savePath = os.path.join(path, "tmp")
-            rasterData = [os.path.join(savePath, "{}.tif".format(tif)) for tif in tifs]
-            datas.append(rasterData)
-            for tif in tifs:
-                z2 = zipfile.ZipFile(zipPath, 'r')
-                futures.append(excutor.submit(self.readTifInZip, tif, z2, savePath, mainBand, bar, n, multiThread))
-            z.close()
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                tqdm.write("Error in read tif: {}".format(e))
-        
-        bar.set_description("Mosaicing all rasters to new raster")
-        bar.update(2)
-        if mainBand in [1, 5]:
-            resample = gdal.GRA_Max
-        else:
-            resample = gdal.GRA_Sum
-        mosaic = gdal.Warp(
-            destNameOrDestDS=result,
-            srcDSOrSrcDSTab=datas,
-            format="GTiff",
-            srcSRS="EPSG:4326", # Set to WGS84
-            srcNodata=0,
-            dstSRS="EPSG:4326", # Set to WGS84
-            dstNodata=0,
-            resampleAlg=resample,
-            multithread=True,
-            creationOptions=[
-                "NUM_THREADS=ALL_CPUS",
-                "COMPRESS=DEFLATE",
-                "TILED=YES"
-                ]
-        )
-        mosaic = None # Clean data
-        del mosaic
-        gc.collect()
-        bar.set_description("Saving result")
-        bar.update(4)
-
-        # Save metadata
-        metadata = pd.DataFrame({"File Names": files})
-        metadata.to_csv(os.path.join(savePath, "{}_metadata.csv".format(country)), encoding="utf-8")
-        bar.update(4)
-        bar.close()
-        shutil.rmtree(tmpPath)
-
-        return result
     
     def readTifInZip(self, tif: str, z: zipfile.ZipFile, savePath: str, mainBand: int, bar: tqdm, n: int, multiThread: int) -> None:
         fileSize = z.getinfo(tif).file_size
@@ -351,6 +218,3 @@ if __name__ == "__main__":
     # Only remove water bodies
     floodingMerge(r"C:\\0_PolyU\\flooding2").readAllTifInZip("C:\\0_PolyU\\floodingAll_Days", 2, multiThread=os.cpu_count()) # type: ignore
     # floodingMerge(r"C:\\0_PolyU\\flooding").calculateStasticPeriod("C:\\0_PolyU\\flooding")
-    ## gdal.Warp have some problems and will not merge all files correctly
-    # floodingMerge(r"C:\\0_PolyU\\flooding").mergeOneCountry("CHN", "test", 2, multiThread=os.cpu_count()) # type: ignore
-    # floodingMerge(r"C:\\0_PolyU\\flooding").mergeAll("C:\\0_PolyU\\floodingAll\\mergeByCountry", 2, multiThread=os.cpu_count() ** 0.5) # type: ignore

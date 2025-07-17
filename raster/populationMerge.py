@@ -1,6 +1,5 @@
 import sys, os, threading, gc
 import pandas as pd
-# import warp as wp
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from typing import override
@@ -61,39 +60,30 @@ class populationMerge(floodingMerge):
             except Exception as e:
                 tqdm.write("Error in merge country {}: {}".format(country, e))
 
-        # Different countries may have overlap，so use max (union)
-        bar.set_description("Merging all countries...")
-        bar.update(1)
-        mosaic = gdal.Warp(
-            destNameOrDestDS=os.path.join(savePath, "0_All_merge.tif"),
-            srcDSOrSrcDSTab=saved,
-            format="GTiff",
-            srcSRS="EPSG:4326", # Set to WGS84
-            srcNodata=0,
-            dstSRS="EPSG:4326", # Set to WGS84
-            dstNodata=0,
-            resampleAlg=gdal.GRA_Max,
-            multithread=True,
-            creationOptions=[
-                "NUM_THREADS=ALL_CPUS",
-                "COMPRESS=DEFLATE",
-                "TILED=YES"
-                ]
-        )
-        mosaic = None
-        del mosaic
-        gc.collect()
+        # # Different countries may have overlap，so use max (union)
+        # bar.set_description("Merging all countries...")
+        # bar.update(1)
+        # mosaic = gdal.Warp(
+        #     destNameOrDestDS=os.path.join(savePath, "0_All_merge.tif"),
+        #     srcDSOrSrcDSTab=saved,
+        #     format="GTiff",
+        #     srcSRS="EPSG:4326", # Set to WGS84
+        #     srcNodata=0,
+        #     dstSRS="EPSG:4326", # Set to WGS84
+        #     dstNodata=0,
+        #     resampleAlg=gdal.GRA_Max,
+        #     multithread=True,
+        #     creationOptions=[
+        #         "NUM_THREADS=ALL_CPUS",
+        #         "COMPRESS=DEFLATE",
+        #         "TILED=YES"
+        #         ]
+        # )
+        # mosaic = None
+        # del mosaic
+        # gc.collect()
         bar.update(9)
         
-        return
-    
-    @override
-    def mergeOneCountry(self, country: str, savePath: str, mainBand: int, multiThread: int = 0) -> None:
-        """
-        This function is not implemented in populationMerge, use mergeByAge instead.
-        """
-        print("This function is not implemented in populationMerge, use mergeByAge instead.")
-
         return
 
     def mergeByAge(
