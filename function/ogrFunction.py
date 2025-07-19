@@ -1,4 +1,7 @@
-from osgeo import ogr
+import gc
+from osgeo import ogr, gdal
+from contextlib import contextmanager
+from typing import Generator
 
 # Creat a new field in gpkg
 def creatField(layer: ogr.Layer, fieldName: str, fieldType: int, maxLength: int = 255) -> None:
@@ -12,3 +15,18 @@ def creatField(layer: ogr.Layer, fieldName: str, fieldType: int, maxLength: int 
     layer.CreateField(fieldDefn)
 
     return
+
+@contextmanager
+def orgDatasets(path: str, openType: int = 0, close: bool = True) -> 'Generator[gdal.Dataset, None, None]':
+    ds = ogr.Open(path, openType) # 0 is read only, 1 is writable
+    try:
+        if not isinstance(ds, gdal.Dataset):
+            raise RuntimeError("Failed to open layer dataset: {}".format(path))
+        yield ds
+    except:
+        close = True
+        raise RuntimeError
+    finally:
+        if close:
+            ds.Destroy()
+            gc.collect()

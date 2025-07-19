@@ -2,7 +2,6 @@ import sys, os, zipfile, threading, psutil, gc, shutil, time
 import rasterio as rio
 import pandas as pd
 import numpy as np
-# import warp as wp
 from rasterio.io import MemoryFile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
@@ -14,9 +13,9 @@ sys.path.append(".") # Set path to the roots
 from function.readFiles import readFiles, mkdir
 
 class floodingMerge:
-    __slots__ = ["path", "subThreadSize", "__maxThread"]
+    __slots__ = ["path", "subThreadSize", "maxThread", "BLOCK_SIZE"]
 
-    def __init__(self, path: str, subThreadSize: int = 512):
+    def __init__(self, path: str, subThreadSize: int = 512, blockSize: int = 1024):
         """
         Initialization setting
 
@@ -31,24 +30,24 @@ class floodingMerge:
         # Init gdal
         gdal.UseExceptions()
         gdal.SetConfigOption("GDAL_NUM_THREADS", "ALL_CPUS")
-        # 在代码开头配置GDAL缓存
         gdal.SetConfigOption("GDAL_CACHEMAX", "1024")  # 1024MB
         gdal.SetConfigOption("VSI_CACHE", "TRUE")
         gdal.SetConfigOption("VSI_CACHE_SIZE", "536870912")  # 512MB
-        ## Init GPU
-        # wp.init()
+
+        # Init other data
         self.path = path
         CPUCount = os.cpu_count()
         if CPUCount is None:
             CPUCount = 1
         memorySize = psutil.virtual_memory().available / (1024 ** 2) # One thread needs 512M in default
-        self.__maxThread = min(int(memorySize // subThreadSize), int(CPUCount ** 0.5))
+        self.maxThread = min(int(memorySize // subThreadSize), int(CPUCount ** 0.5))
         print(
             "Default multi-thread number based on the remain memeory size {}GB: {}".format(
                 memorySize // 1024,
-                self.__maxThread
+                self.maxThread
                 )
         )
+        self.BLOCK_SIZE = blockSize
 
     def readAllTifInZip(self, savePath: str, mainBand: int, multiThread: int = 0) -> None:
         countries = readFiles(self.path).allFolder()
@@ -65,7 +64,7 @@ class floodingMerge:
             datas.add(file[0:-4])
         bar = tqdm(total=i, desc="Starting", postfix="Total {} countries".format(c))
         if multiThread == 0:
-            multiThread = self.__maxThread
+            multiThread = self.maxThread
 
         futures = []
         futuresToCountry = {} # Store futures to country mapping for debugging
@@ -120,6 +119,7 @@ class floodingMerge:
                 bar.set_description("Not enough memory of {}MB to read {}. Waiting.. ".format(fileSize // (1024 ** 2), tif))
                 time.sleep(0.1)
                 bar.set_description("Not enough memory of {}MB to read {}. Waiting...".format(fileSize // (1024 ** 2), tif))
+                time.sleep(0.1)
                 gc.collect()
                 threading.Event().wait(1)
         flooding = z.read(tif)
@@ -131,18 +131,6 @@ class floodingMerge:
         Band 2: flood_duration
         Band 5: jrc_perm_water (1 - permanent water, 0 - non-water)
         """
-        # @wp.kernel
-        # def removePW(
-        #     data: wp.array(dtype=int), # type: ignore
-        #     premWater: wp.array(dtype=wp.bool), # type: ignore
-        #     output: wp.array(dtype=int) # type: ignore
-        # ) -> None:
-        #     i = wp.tid()
-        #     if premWater[i]:
-        #         output[i] = 0
-        #     else:
-        #         output[i] = data[i]
-
         data: np.ndarray = dataset.read(mainBand)
         if mainBand != 5:
             # Exclude permanent water

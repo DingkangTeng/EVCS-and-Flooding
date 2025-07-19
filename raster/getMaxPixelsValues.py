@@ -9,9 +9,13 @@ from raster.getPixelsValues import getPixelsValues
 class getMaxPixelsValues(getPixelsValues):
     def maxPixelsValuesByLayer(self, fid: int, band: int=1) -> list:
         with self.orgDatasets(self.layerPath) as layerDs:
-            return self.maxPixelsValuesByFid(layerDs, fid, band)
+            result = self.maxPixelsValuesByFid(layerDs, fid, band)
+            if not isinstance(result, Exception):
+                return result
+            else:
+                raise RuntimeError(result)
 
-    def maxPixelsValuesByFid(self, layerDs: gdal.Dataset, fid: int, band: int=1) -> list:
+    def maxPixelsValuesByFid(self, layerDs: gdal.Dataset, fid: int, band: int=1) -> list | Exception:
         """
         Get pixel values along one layer with fid in a raster.
         """
@@ -54,7 +58,7 @@ class getMaxPixelsValues(getPixelsValues):
                 # coords = np.array(transformed)[:, :2]
                 # XMin, YMin = coords.min(axis=0)
                 # XMax, YMax = coords.max(axis=0)
-                outDs = driver.CreateDataSource('memData')
+                outDs = driver.CreateDataSource("memData")
                 if not isinstance(outDs, gdal.Dataset):
                     raise RuntimeError("Failed to creat memeory dataset for projection.")
                 outLayer = outDs.CreateLayer('memLayer', srs=self.ref, geom_type=querylayer.GetGeomType())
@@ -77,6 +81,13 @@ class getMaxPixelsValues(getPixelsValues):
                 isQuery = False
             
             XMin, XMax, YMin, YMax = querylayer.GetExtent()
+            # Aviod the problem that the vector are too short to get a rectangle
+            if XMin == XMax:
+                XMin -= 0.0000001
+                XMax += 0.0000001
+            if YMin == YMax:
+                YMin -= 0.0000001
+                YMax += 0.0000001
 
             # Get raster data withing the layer extent
             warpOptions = gdal.WarpOptions(
@@ -86,7 +97,10 @@ class getMaxPixelsValues(getPixelsValues):
                 dstNodata=0,
                 multithread=True,
             )
-            memDs = gdal.Warp('', self.rasterPath, options=warpOptions)
+            try:
+                memDs = gdal.Warp('', self.rasterPath, options=warpOptions)
+            except:
+                raise RuntimeError("Failed to excute gdal.Warp()")
             if not isinstance(memDs, gdal.Dataset):
                 raise RuntimeError("Failed to warp raster with the provided options.")
             rasterArray = memDs.ReadAsArray()
@@ -133,6 +147,8 @@ class getMaxPixelsValues(getPixelsValues):
             
             return result.tolist()  # Return the maximum pixel value along the layer
         
+        except Exception as e:
+            return e
         finally:
             # Release Rousce
             if memDs:
@@ -159,9 +175,10 @@ if __name__ == "__main__":
     a = getMaxPixelsValues("C:\\0_PolyU\\flooding\\SumDays.tif")
     for i in ["test\\OSM_Nanjin_ThirdRoad.gpkg"]:
         a.updateLayerInfo((i, "edges"))
-        layers = gpd.read_file(i, layer="edges", encoding="utf-8")
-        for layer in layers.index:
-            values = a.maxPixelsValuesByLayer(layer + 1) # Index + 1 is fid
-            # print(set(values)) #1414 support value: set(0,2,3,4,5,7,8); 16897: set(1, 21); 14499: set()
+        # layers = gpd.read_file(i, layer="edges", encoding="utf-8")
+        # for index in layers.index:
+        #     values = a.maxPixelsValuesByLayer(index + 1) # Index + 1 is fid
+        values = a.maxPixelsValuesByLayer(13921) # Index + 1 is fid
+        print(set(values)) #1414 support value: set(0,2,3,4,5,7,8); 16897: set(1, 21); 14499: set()
     end = time.perf_counter()
     print("Running time for example takes {} mins".format((end - start)/60))

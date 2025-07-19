@@ -1,14 +1,16 @@
 import sys, gc
 from osgeo import gdal, ogr, osr
-from contextlib import contextmanager
-from typing import Generator
 
 sys.path.append(".") # Set path to the roots
+
+from function.ogrFunction import orgDatasets
+from function.gdalFunction import gdalDatasets
 
 class getPixelsValues:
     __slots__ = [
         "layerPath", "layerName", "layerRef",
-        "rasterPath", "projection", "geotrans", "ref"
+        "rasterPath", "projection", "geotrans", "ref",
+        "orgDatasets", "gdalDatasets"
     ]
     
     def __init__(self, rasterPath: str | None = None, layer: str | tuple[str, str] | None = None):
@@ -16,46 +18,17 @@ class getPixelsValues:
         Initialize the class.
         """
         gdal.UseExceptions()
+        gdal.SetConfigOption("GDAL_NUM_THREADS", "ALL_CPUS")
         self.rasterPath: str | None = None
         self.layerName: str | None = None
+        self.orgDatasets = orgDatasets
+        self.gdalDatasets = gdalDatasets
 
         if rasterPath is not None:
             self.updateRasterInfo(rasterPath)
         if layer is not None:
             self.updateLayerInfo(layer)
-    
-    @staticmethod
-    @contextmanager
-    def gdalDatasets(path: str, close: bool = True) -> 'Generator[gdal.Dataset, None, None]':
-        ds = gdal.Open(path)
-        try:
-            if not isinstance(ds, gdal.Dataset):
-                raise RuntimeError("Failed to open raster dataset: {}".format(path))
-            else:
-                yield ds
-        except:
-             close = True
-             raise RuntimeError
-        finally:
-            if close:
-                ds.Destroy()
-                gc.collect()
-    
-    @staticmethod
-    @contextmanager
-    def orgDatasets(path: str, openType: int = 0, close: bool = True) -> 'Generator[gdal.Dataset, None, None]':
-        ds = ogr.Open(path, openType) # 0 is read only, 1 is writable
-        try:
-            if not isinstance(ds, gdal.Dataset):
-                raise RuntimeError("Failed to open layer dataset: {}".format(path))
-            yield ds
-        except:
-            close = True
-            raise RuntimeError
-        finally:
-            if close:
-                ds.Destroy()
-                gc.collect()
+
 
     def updateLayerInfo(self, layer: str | tuple[str, str]) -> None:
         layerDs = False
@@ -79,6 +52,8 @@ class getPixelsValues:
             if not isinstance(self.layerRef, osr.SpatialReference):
                 raise RuntimeError("Failed to get spatial reference from layer dataset.")
         
+        except:
+            raise RuntimeError
         finally:
             if layerDs:
                 layerDs.Destroy()
@@ -97,4 +72,4 @@ class getPixelsValues:
 
 # Debugging and testing
 if __name__ == "__main__":
-    pass
+    a = getPixelsValues("C:\\0_PolyU\\flooding\\SumDays.tif")

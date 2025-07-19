@@ -1,4 +1,6 @@
 import sqlite3
+import pandas as pd
+from typing import Any
 
 # Load SpatiaLite extension
 class spatialiteConnection(sqlite3.Connection):
@@ -32,20 +34,33 @@ class spatialiteConnection(sqlite3.Connection):
     
 # Modify table
 class modifyTable(sqlite3.Cursor):
-    def addFields(self, tableName: str, *fields: tuple[str, str]) -> None:
+    def addFields(self, tableName: str, *fields: tuple[str, str, Any]) -> None:
         self.execute("PRAGMA table_info({})".format(tableName))
         existingColumns = [col[1] for col in self.fetchall()]
         for field in fields:
-            fieldName, colType = field
+            fieldName, colType, initialValue = field
             if fieldName not in existingColumns:
-                self.execute(
-                    """
-                    ALTER TABLE edges
-                    ADD COLUMN {} {}
-                    """.format(
-                        fieldName,
-                        colType
+                if initialValue is not None:
+                    self.execute(
+                        """
+                        ALTER TABLE edges
+                        ADD COLUMN {} {}
+                        DEFAULT {}
+                        """.format(
+                            fieldName,
+                            colType,
+                            initialValue
+                        )
                     )
-                )
+                else:
+                    self.execute(
+                        """
+                        ALTER TABLE edges
+                        ADD COLUMN {} {}
+                        """.format(
+                            fieldName,
+                            colType
+                        )
+                    )
 
         return

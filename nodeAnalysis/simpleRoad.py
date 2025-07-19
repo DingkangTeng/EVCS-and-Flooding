@@ -174,7 +174,7 @@ if __name__ == "__main__":
         [\"highway\"~\"^motorway$|^trunk$|^primary$|^secondary$|^tertiary$|^motorway_link$| \
         ^trunk_link$|^primary_link$|^secondary_link$|^tertiary_link$\"] \
     "
-    getSimpleRoad().getAllCountriesNetworksGraph("test", customFilter=customFilter, multiThread=os.cpu_count()) # type: ignore
+    getSimpleRoad().getAllCountriesNetworksGraph("C:\\0_Data\\globalRoad", customFilter=customFilter, multiThread=1) # type: ignore
 
     # Following steps are not implemented yet
     # Nodes -> Tissen polygons -> connect nodes with EVCS and population
