@@ -12,16 +12,20 @@ from raster.getPixelsValues import getPixelsValues
 from function.gdalFunction import getRasterByRectangleBoundary
 
 class getPointPixelsValue(getPixelsValues):
-    def getAllLayerValue(self):
+    def getAllLayerValue(self) -> None:
+        # Wait until all EVCS data are collected...
 
         return
     
-    def getOneLayerValue(self, layer: str | tuple[str, str], multiLayerLock: bool = False):
+    def getOneLayerValue(self, layer: str | tuple[str, str], multiLayerLock: bool = False) -> ...:
         # Check Initialize
         if self.rasterPath is None:
             raise RuntimeError("Have not initialized raster data, use updateRasterInfo().")
         self.updateLayerInfo(layer)
-        vectorData = gpd.read_file(self.layerPath, layer=self.layerName)
+        if self.layerType:
+            vectorData = gpd.read_file(self.layerPath)
+        else:
+            vectorData = gpd.read_file(self.layerPath, layer=self.layerName)
         XCoords = vectorData.geometry.x.to_numpy().astype(np.float32)
         YCoords = vectorData.geometry.y.to_numpy().astype(np.float32)
         fid = vectorData.index.to_numpy() + 1

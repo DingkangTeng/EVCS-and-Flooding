@@ -7,11 +7,11 @@ from bs4 import Tag
 sys.path.append(".") # Set path to the roots
 
 from crawlerF.crawler import crawler
-from function.readFiles import mkdir
+from function.readFiles import mkdir, readFiles
 
 class globalPopulation(crawler):
     __url = "https://hub.worldpop.org/ajax/geolisting/category?id=88"
-    __countries = []
+    __countries: list[dict[str, str]] = []
     """
     meta example:
     [{'id': '50353',
@@ -27,6 +27,7 @@ class globalPopulation(crawler):
     __indexC = []
 
     def __init__(self):
+        print("Getting all countries' metadata from WolfPop...")
         self.getAllCountries()
     
     def getAllCountries(self) -> None:
@@ -42,7 +43,7 @@ class globalPopulation(crawler):
     
     def downloadAll(self, savePath: str):
         for i in self.__countries:
-            self.downloadOneCountry(savePath, id=i.get("id"))
+            self.downloadOneCountry(savePath, id=i["id"])
 
         return
 
@@ -82,6 +83,7 @@ class globalPopulation(crawler):
         iso = iso[-3]
         savePath2 = os.path.join(savePath, iso)
         mkdir(savePath2)
+        existFile = readFiles(savePath2).specifcFile(suffix=["tif"])
         for i in a:
             if not isinstance(i, Tag):
                 continue
@@ -89,6 +91,8 @@ class globalPopulation(crawler):
             if downloadUrl is not str:
                 continue
             filename = downloadUrl.split("/")[-1]
+            if filename in existFile:
+                continue
             # Download
             super().__init__(downloadUrl)
             self.download(os.path.join(savePath2, filename), multi=False)
@@ -98,17 +102,21 @@ class globalPopulation(crawler):
 
         return True
 
-    def downloadOneCountryByISO(self, savePath, iso: str):
-        url = "https://data.worldpop.org/GIS/AgeSex_structures/Global_2000_2020_Constrained_UNadj/2020/" \
-            "{}//{}_{}_{}_2020_constrained_UNadj.tif"
+    def downloadOneCountryByISO(self, savePath: str, iso: str):
+        fileName = "{}_{}_{}_2020_constrained_UNadj.tif"
+        url = "https://data.worldpop.org/GIS/AgeSex_structures/Global_2000_2020_Constrained_UNadj/2020/{}//{}"
         age = ["0", "1"] + [str(5 * x) for x in range(1, 17)]
         mkdir(savePath)
+        existFile = readFiles(savePath).specifcFile(suffix=["tif"])
         for g in ["f", "m"]:
             for a in age:
-                super().__init__(url.format(iso.upper(), iso, g, a))
-                self.download(savePath, multi=False)
+                file = fileName.format(iso.lower(), g, a)
+                if file in existFile:
+                    continue
+                super().__init__(url.format(iso.upper(), file))
+                self.download(os.path.join(savePath, file), multi=False)
 
 if __name__ == "__main__":
     a = globalPopulation()
-    for country in ["IDN", "IND", "IRN", "IRQ", "ISR", "JOR", "JPN", "KAZ", "KGZ", "KWT", "LAO", "LBN"]:
-        a.downloadOneCountry("test", country=country)
+    for country in ["IND", "IRN", "IRQ", "ISR", "JOR", "JPN", "KAZ", "KGZ", "KWT", "LAO", "LBN"]:
+        a.downloadOneCountryByISO(os.path.join("C:\\0_PolyU\\population_tmp", country), country)

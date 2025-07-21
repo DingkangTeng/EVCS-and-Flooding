@@ -15,7 +15,7 @@ from function.readFiles import readFiles, mkdir
 class floodingMerge:
     __slots__ = ["path", "subThreadSize", "maxThread", "BLOCK_SIZE"]
 
-    def __init__(self, path: str, subThreadSize: int = 512, blockSize: int = 1024):
+    def __init__(self, path: str, subThreadSize: int = 512, blockSize: int = 1024) -> None:
         """
         Initialization setting
 

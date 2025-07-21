@@ -14,7 +14,7 @@ from function.readFiles import readFiles, mkdir
 class getSimpleRoad:
     __slots__ = ["subThreadSize", "__maxThread"]
 
-    def __init__(self, subThreadSize: int = 1024):
+    def __init__(self, subThreadSize: int = 1024) -> None:
         """
         Initialize the getSimpleRoad class
         """
@@ -78,21 +78,27 @@ class getSimpleRoad:
         excutor = ThreadPoolExecutor(max_workers=multiThread)
 
         for PN in allCountries:
-            future = excutor.submit(
-                self.getOneCountry,
+        #     future = excutor.submit(
+        #         self.getOneCountry,
+        #         PN,
+        #         savePath=savePath,
+        #         customFilter=customFilter,
+        #         multiThread=(bar, exceptionList, exceptionLock)
+        #     )
+        #     futures.append(future)
+        #     futuresToCountry[future] = PN  # Map future to country name
+        # for future in as_completed(futures):
+        #     try:
+        #         future.result()
+        #     except Exception as e:
+        #         tqdm.write("Error in get country {}: {}".format(futuresToCountry[future], e))
+
+            self.getOneCountry(
                 PN,
                 savePath=savePath,
                 customFilter=customFilter,
                 multiThread=(bar, exceptionList, exceptionLock)
             )
-            futures.append(future)
-            futuresToCountry[future] = PN  # Map future to country name
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                tqdm.write("Error in get country {}: {}".format(futuresToCountry[future], e))
-
         pd.DataFrame(
             exceptionList,
             columns=["Country", "Exception Times", "Exception Messages"],
@@ -123,6 +129,9 @@ class getSimpleRoad:
         exceptionTimes = 0
         exceptionCountry = ["", 0, []]
         while True:
+            if PN == "KIRIBATI":
+                exceptionCountry = ["KIRIBATI", 1, ["KIRIBATI queried too large area with sea."]]
+                return exceptionCountry
             try:
                 G = ox.graph_from_place(
                     PN,

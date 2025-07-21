@@ -8,12 +8,12 @@ from function.gdalFunction import gdalDatasets
 
 class getPixelsValues:
     __slots__ = [
-        "layerPath", "layerName", "layerRef",
+        "layerPath", "layerName", "layerRef", "layerType"
         "rasterPath", "projection", "geotrans", "ref",
         "orgDatasets", "gdalDatasets"
     ]
     
-    def __init__(self, rasterPath: str | None = None, layer: str | tuple[str, str] | None = None):
+    def __init__(self, rasterPath: str | None = None, layer: str | tuple[str, str] | None = None) -> None:
         """
         Initialize the class.
         """
@@ -23,6 +23,7 @@ class getPixelsValues:
         self.layerName: str | None = None
         self.orgDatasets = orgDatasets
         self.gdalDatasets = gdalDatasets
+        self.layerType = False # False means db data
 
         if rasterPath is not None:
             self.updateRasterInfo(rasterPath)
@@ -35,6 +36,7 @@ class getPixelsValues:
         try:
             if type(layer) is str:
                 self.layerPath = layer
+                self.layerType = True
                 with self.orgDatasets(self.layerPath, close=False) as layerDs:
                     layer = layerDs.GetLayer(0)
                     if not isinstance(layer, ogr.Layer):

@@ -225,11 +225,11 @@ class populationMerge(floodingMerge):
 if __name__ == "__main__":
     # Adjust the multi-thread number based on your computer, too much threads will cause memory overflow
     # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=4096).mergeByAge("CHN", "test")
-    # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_All", multiThread=4)
-    # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_Male", gender=['m'], multiThread=4)
-    # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_Female", gender=['f'], multiThread=4)
-    #需要重新下载人口的国家：IDN、IND、IRN、IRQ、ISR、JOR、JPN、KAZ、KGZ、KWT、LAO、LBN
-    # age group ?
-    for ageGroup in [[], [], []]:
-        populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_test", mainAge=ageGroup, multiThread=4)
+    populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_All", multiThread=4)
+    populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_Male", gender=['m'], multiThread=4)
+    populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_Female", gender=['f'], multiThread=4)
+    #需要重新下载人口的国家：IND、IRN、IRQ、ISR、JOR、JPN、KAZ、KGZ、KWT、LAO、LBN
+    # # age group ?
+    # for ageGroup in [[], [], []]:
+    #     populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_test", mainAge=ageGroup, multiThread=4)
     #NZL\KIR\RUS\FJI are too large for blocksize over 512 when using gpu on rtx5070

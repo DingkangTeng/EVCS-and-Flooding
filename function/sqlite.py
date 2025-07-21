@@ -43,10 +43,11 @@ class modifyTable(sqlite3.Cursor):
                 if initialValue is not None:
                     self.execute(
                         """
-                        ALTER TABLE edges
+                        ALTER TABLE {}
                         ADD COLUMN {} {}
                         DEFAULT {}
                         """.format(
+                            tableName,
                             fieldName,
                             colType,
                             initialValue
@@ -55,9 +56,10 @@ class modifyTable(sqlite3.Cursor):
                 else:
                     self.execute(
                         """
-                        ALTER TABLE edges
+                        ALTER TABLE {}
                         ADD COLUMN {} {}
                         """.format(
+                            tableName,
                             fieldName,
                             colType
                         )
