@@ -5,6 +5,7 @@ from osgeo import gdal, ogr, osr
 sys.path.append(".") # Set path to the roots
 
 from raster.getPixelsValues import getPixelsValues
+from function.gdalFunction import getRasterByRectangleBoundary
 
 class getMaxPixelsValues(getPixelsValues):
     def maxPixelsValuesByLayer(self, fid: int, band: int=1) -> list:
@@ -25,7 +26,6 @@ class getMaxPixelsValues(getPixelsValues):
         driver = gdal.GetDriverByName("MEM")
         if not isinstance(driver, gdal.Driver):
             raise RuntimeError("Failed to creat memory driver.")
-        memDs = False
         maskDs = False
         outDs = False
         # Query the layer by fid
@@ -81,79 +81,57 @@ class getMaxPixelsValues(getPixelsValues):
                 isQuery = False
             
             XMin, XMax, YMin, YMax = querylayer.GetExtent()
-            # Aviod the problem that the vector are too short to get a rectangle
-            if XMin == XMax:
-                XMin -= 0.0000001
-                XMax += 0.0000001
-            if YMin == YMax:
-                YMin -= 0.0000001
-                YMax += 0.0000001
 
             # Get raster data withing the layer extent
-            warpOptions = gdal.WarpOptions(
-                format="MEM", # Use in-memory dataset
-                outputBounds=[XMin, YMin, XMax, YMax], # Set the extent to the layer
-                cropToCutline=True, # Crop the raster to the extent of the mask
-                dstNodata=0,
-                multithread=True,
-            )
-            try:
-                memDs = gdal.Warp('', self.rasterPath, options=warpOptions)
-            except:
-                raise RuntimeError("Failed to excute gdal.Warp()")
-            if not isinstance(memDs, gdal.Dataset):
-                raise RuntimeError("Failed to warp raster with the provided options.")
-            rasterArray = memDs.ReadAsArray()
-            rasterArray = np.ma.masked_equal(rasterArray, 0)
-            if rasterArray is None:
-                raise RuntimeError("Failed to read raster band as array.")
-            
-            # Creat layer mask
-            cols = memDs.RasterXSize
-            rows = memDs.RasterYSize
-            if not isinstance(driver, gdal.Driver):
-                raise RuntimeError("Memory driver not available.")
-            maskDs = driver.Create('', cols, rows, 1, gdal.GDT_Byte)
-            if not isinstance(maskDs, gdal.Dataset):
-                raise RuntimeError("Failed to create memory dataset for mask.")
-            maskDs.SetGeoTransform(memDs.GetGeoTransform())
-            maskDs.SetProjection(memDs.GetProjection())
-            maskBand = maskDs.GetRasterBand(band)
-            if not isinstance(maskBand, gdal.Band):
-                raise RuntimeError("Failed to get band from mask dataset.")
-            maskBand.SetNoDataValue(0)
-            maskBand.Fill(0)  # Initialize mask with zeros
-            
-            # Create mask array for the layer
-            err = gdal.RasterizeLayer(maskDs, [1], querylayer, burn_values=[1], options=["ALL_TOUCHED=FALSE"])
-            if err != gdal.CE_None:
-                raise RuntimeError("Rasterization failed with error code: {}".format(err))
-            maskBand = maskDs.GetRasterBand(band)
-            if not isinstance(maskBand, gdal.Band):
-                raise RuntimeError("Failed to get band from rasterized dataset.")
-            maskArray = maskBand.ReadAsArray()
-            
-            # Apply the mask to the raster
-            maskedArray = np.where(maskArray == 1, rasterArray, 0)
+            with getRasterByRectangleBoundary(self.rasterPath, XMin, YMin, XMax, YMax) as memDs:
+                rasterArray = memDs.ReadAsArray()
+                rasterArray = np.ma.masked_equal(rasterArray, 0)
+                if rasterArray is None:
+                    raise RuntimeError("Failed to read raster band as array.")
+                
+                # Creat layer mask
+                cols = memDs.RasterXSize
+                rows = memDs.RasterYSize
+                if not isinstance(driver, gdal.Driver):
+                    raise RuntimeError("Memory driver not available.")
+                maskDs = driver.Create('', cols, rows, 1, gdal.GDT_Byte)
+                if not isinstance(maskDs, gdal.Dataset):
+                    raise RuntimeError("Failed to create memory dataset for mask.")
+                maskDs.SetGeoTransform(memDs.GetGeoTransform())
+                maskDs.SetProjection(memDs.GetProjection())
+                maskBand = maskDs.GetRasterBand(band)
+                if not isinstance(maskBand, gdal.Band):
+                    raise RuntimeError("Failed to get band from mask dataset.")
+                maskBand.SetNoDataValue(0)
+                maskBand.Fill(0)  # Initialize mask with zeros
+                
+                # Create mask array for the layer
+                err = gdal.RasterizeLayer(maskDs, [1], querylayer, burn_values=[1], options=["ALL_TOUCHED=FALSE"])
+                if err != gdal.CE_None:
+                    raise RuntimeError("Rasterization failed with error code: {}".format(err))
+                maskBand = maskDs.GetRasterBand(band)
+                if not isinstance(maskBand, gdal.Band):
+                    raise RuntimeError("Failed to get band from rasterized dataset.")
+                maskArray = maskBand.ReadAsArray()
+                
+                # Apply the mask to the raster
+                maskedArray = np.where(maskArray == 1, rasterArray, 0)
 
-            # # If you want to plot, you can use matplotlib:
-            # import matplotlib.pyplot as plt
-            # plt.imshow(maskedArray)
-            # plt.show()
+                # # If you want to plot, you can use matplotlib:
+                # import matplotlib.pyplot as plt
+                # plt.imshow(maskedArray)
+                # plt.show()
 
-            # Filter results
-            result = maskedArray.reshape(-1)
-            result = result[result != 0]
+                # Filter results
+                result = maskedArray.reshape(-1)
+                result = result[result != 0]
             
-            return result.tolist()  # Return the maximum pixel value along the layer
+                return result.tolist()  # Return the maximum pixel value along the layer
         
         except Exception as e:
             return e
         finally:
             # Release Rousce
-            if memDs:
-                memDs.FlushCache()
-                memDs.Destroy()
             if maskDs:
                 maskDs.FlushCache()
                 maskDs.Destroy()

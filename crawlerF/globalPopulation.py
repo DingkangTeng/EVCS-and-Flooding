@@ -1,5 +1,4 @@
 # It seems that popWorld do not support mutlti-thread downloading?
-
 import sys, os
 import pandas as pd
 from bs4 import BeautifulSoup as bs
@@ -111,4 +110,5 @@ class globalPopulation(crawler):
 
 if __name__ == "__main__":
     a = globalPopulation()
-    a.downloadOneCountry("test", country="Angola")
+    for country in ["IDN", "IND", "IRN", "IRQ", "ISR", "JOR", "JPN", "KAZ", "KGZ", "KWT", "LAO", "LBN"]:
+        a.downloadOneCountry("test", country=country)
