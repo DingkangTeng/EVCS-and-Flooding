@@ -126,7 +126,8 @@ class crawler:
         return
     
     # Split downloading
-    def __split(self, start: int, end: int, step: int) -> list[tuple[int, int]]:
+    @staticmethod
+    def __split(start: int, end: int, step: int) -> list[tuple[int, int]]:
         parts = [(start, min(start+step, end))
                 for start in range(0, end, step)]
         
@@ -152,7 +153,8 @@ class crawler:
         
         return int(fileSize)
 
-    def __staureCode(self, r: requests.Response, rtype: str) -> bool:
+    @staticmethod
+    def __staureCode(r: requests.Response, rtype: str) -> bool:
         code = r.status_code
         if code != 200:
             print("Error, stature code in {} is {}.".format(rtype, code))

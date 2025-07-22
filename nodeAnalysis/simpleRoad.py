@@ -129,8 +129,8 @@ class getSimpleRoad:
         exceptionTimes = 0
         exceptionCountry = ["", 0, []]
         while True:
-            if PN == "KIRIBATI":
-                exceptionCountry = ["KIRIBATI", 1, ["KIRIBATI queried too large area with sea."]]
+            if PN in ["KIRIBATI", "ANTARCTICA", "NEW CALEDONIA", "PITCAIRN"]:
+                exceptionCountry = [PN, 1, ["Queried too large area with sea or no data."]]
                 return exceptionCountry
             try:
                 G = ox.graph_from_place(

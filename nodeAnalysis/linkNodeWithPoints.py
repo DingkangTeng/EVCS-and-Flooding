@@ -68,7 +68,7 @@ class linkNodeWithPoints:
 
         # Build KD-Tree
         tree = KDTree(node)
-        distance, indices = tree.query(point, k=1)
+        _, indices = tree.query(point, k=1)
 
         # Calculates the resultes
         dataPoint["nearestFid"] = indices + 1
