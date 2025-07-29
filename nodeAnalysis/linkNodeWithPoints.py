@@ -1,4 +1,4 @@
-import sys, gc, sqlite3, os
+import sys, sqlite3, os, threading
 import pandas as pd
 import geopandas as gpd
 import numpy as np
@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 sys.path.append(".") # Set path to the roots
 
 from function.sqlite import spatialiteConnection, modifyTable
-from function.readFiles import readFiles
+from function.readFiles import readFiles, loadJsonRecord
 
 class linkNodeWithPoints:
     def __init__(self) -> None:
@@ -21,7 +21,7 @@ class linkNodeWithPoints:
         conn.loadSpatialite() # Load spatialite extension
         cursor = conn.cursor(factory=modifyTable)
         # Add field
-        cursor.addFields("nodes", ("EVCSNum", "Integer", 0), ("EVCSFids", "Text", None))
+        cursor.addFields("nodes", ("EVCSNum", "Integer", None), ("EVCSFids", "Text", None))
         # Add data
         df.to_sql("tempTable", conn, if_exists="replace", index=False)
         cursor.execute(
@@ -33,7 +33,7 @@ class linkNodeWithPoints:
                 EVCSFids = (SELECT tempTable.EVCSFids
                         FROM tempTable 
                         WHERE tempTable.nodesFid = nodes.fid)
-            WHERE EVCSNum = 0
+            WHERE EVCSNum is NULL
             """
         )
         cursor.execute("DROP TABLE IF EXISTS tempTable")
@@ -50,7 +50,7 @@ class linkNodeWithPoints:
         if type(layerPoint) is str:
             dataPoint = gpd.read_file(layerPoint, encoding="utf-8")
         else:
-            dataPoint = gpd.read_file(layerPoint[0], layer=layerNode[1], encoding="utf-8")
+            dataPoint = gpd.read_file(layerPoint[0], layer=layerPoint[1], encoding="utf-8")
 
         # Change CRS
         nodeCRS = dataNode.crs
@@ -87,18 +87,38 @@ class linkNodeWithPoints:
         return
     
     def processAllLayers(self, pathNode: str, MultiThread: int = 1) -> None:
-        allNodes = readFiles(pathNode).specifcFile(suffix=["gpkg"])
+        def excute(layerNode: tuple[str, str], layerPoint: str | tuple[str, str], stature: tuple[list, threading.Lock, tqdm]) -> None:
+            l, lock, bar = stature
+            try:
+                self.processOneLayer(layerNode, layerPoint)
+            except Exception as e:
+                raise RuntimeError(e)
+            else:
+                with lock:
+                    bar.update(1)
+                    l.append(os.path.basename(layerNode[0]))
+
+        allNodes = set(readFiles(pathNode).specificFile(suffix=["gpkg"]))
+        # Update log
+        log = os.path.join(pathNode, "log.json")
+        stature = loadJsonRecord.load(log, "EVCS")
+        assert type(stature) is list
+        if len(stature) != 0:
+            for i in stature:
+                allNodes.discard(i)
+            tqdm.write("The following gpkgs have already been processed and skipped: \n{}".format(stature))
         bar = tqdm(total = len(allNodes), desc="Running KD-Trees", unit="layer")
         futures = []
         debugDict = {}
         excutor = ThreadPoolExecutor(max_workers=MultiThread)
+        lock = threading.Lock()
         for node in allNodes:
             path = os.path.join(pathNode, node)
             nodeName = node.split('.')[0]
             # Get corresponding EVCS layer
             # Data have not collected, using nanjin as example
             evcs = ("_GISAnalysis\\TestData\\test.gdb", "nanjin")
-            future = excutor.submit(self.processOneLayer, (path, "nodes"), evcs)
+            future = excutor.submit(excute, (path, "nodes"), evcs, (stature, lock, bar))
             futures.append(future)
             debugDict[future] = nodeName
         
@@ -106,11 +126,12 @@ class linkNodeWithPoints:
             nodeName = debugDict[future]
             try:
                 future.result()
-                bar.update(1)
             except Exception as e:
-                tqdm.write("Error in processing {}: \n{}".format(nodeName, e))
+                tqdm.write("Error in processing {}: {}".format(nodeName, e))
 
         bar.close()
+        # Only successed sub-thread will append processed data into log list
+        loadJsonRecord.save(log, "EVCS", stature)
 
         return
 

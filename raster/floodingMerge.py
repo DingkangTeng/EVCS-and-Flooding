@@ -57,10 +57,10 @@ class floodingMerge:
         # Get basic information
         for country in countries:
             path = os.path.join(self.path, country)
-            files = readFiles(path).specifcFile(suffix=["zip"])
+            files = readFiles(path).specificFile(suffix=["zip"])
             n = len(files)
             i += n
-        for file in readFiles(savePath).specifcFile(suffix=["tif"]):
+        for file in readFiles(savePath).specificFile(suffix=["tif"]):
             datas.add(file[0:-4])
         bar = tqdm(total=i, desc="Starting", postfix="Total {} countries".format(c))
         if multiThread == 0:
@@ -71,7 +71,7 @@ class floodingMerge:
         excutor = ThreadPoolExecutor(max_workers=multiThread)
         for country in countries:
             path = os.path.join(self.path, country)
-            files = readFiles(path).specifcFile(suffix=["zip"])
+            files = readFiles(path).specificFile(suffix=["zip"])
             n = len(files)
             
             if n == 0:
@@ -181,7 +181,7 @@ class floodingMerge:
         results = {"Country": [], "StasticTimePeriod(dyas)": [], "StasticTimes": []}
         for country in countries:
             path = os.path.join(self.path, country)
-            files = readFiles(path).specifcFile(suffix=["zip"])
+            files = readFiles(path).specificFile(suffix=["zip"])
             results["Country"].append(country)
             results["StasticTimes"].append(len(files))
             days = 0

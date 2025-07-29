@@ -3,16 +3,18 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 
 sys.path.append(".") # Set path to the roots
 
-from function.readFiles import readFiles
+from function.readFiles import readFiles, loadJsonRecord
 from function.sqlite import spatialiteConnection, modifyTable
 from raster.getMaxPixelsValues import getMaxPixelsValues
 
 # Already use window in getMaxPixelsValues, do not need extra memory management when executing
 class calculateFloodingInfluence:
+    __slots__ = ["initialClass"]
+
     def __init__(self, floodingPath: str) -> None:
         self.initialClass = getMaxPixelsValues(rasterPath=floodingPath)
 
@@ -30,6 +32,65 @@ class calculateFloodingInfluence:
                 
             except Exception as e:
                 return e
+    
+    def calOneGpkg(self, roadPath: str, gpkg: str, fieldName: str, multiThread: int = 1) -> bool:
+            path = os.path.join(roadPath, gpkg)
+
+            # Add field
+            conn = sqlite3.connect(path)
+            cursor = conn.cursor(factory=modifyTable)
+            cursor.addFields("edges", (fieldName, "Integer", None)) # Add fields if not exists
+            conn.commit()
+            conn.close()
+
+            # Initial gpkg data, skip the gpkg file which has been processed
+            self.initialClass.updateLayerInfo((path, "edges"))
+            gdf = gpd.read_file(path, layer="edges", encoding="utf-8")
+            gdf = gdf[gdf[fieldName].isna()]
+            if gdf.shape[0] == 0:
+                gdf = None
+                gc.collect()
+                return True
+            bar = tqdm(total=gdf.shape[0], desc="Processing country {}".format(gpkg.split('.')[0]), unit="road")
+            gdf = None
+            gc.collect()
+
+            # Segment saving
+            gdf = gpd.read_file(path, layer="edges", encoding="utf-8")
+            gdf.drop(gdf.loc[~gdf[fieldName].isna()].index, inplace=True)
+            indexsArray = np.array_split(gdf.index, max(1, gdf.shape[0] // 10000)) # Save every 10000 times
+            output = []
+            futures = []
+            futuresToIndex = {} # Mapping future for debug
+            outputLock = threading.Lock()
+            success = True
+            for indexs in indexsArray:
+                try:
+                    excutor = ThreadPoolExecutor(max_workers=multiThread)
+                    for index in indexs:
+                        # Update null value
+                        future = excutor.submit(self.executeMethod, index, output, outputLock)
+                        futures.append(future)
+                        futuresToIndex[future] = index + 1
+                    for future in as_completed(futures):
+                        try:
+                            future.result()
+                            bar.update(1)
+                        except Exception as e:
+                            tqdm.write("Error in road with fid {}: {}".format(futuresToIndex[future], e))
+                except Exception as e:
+                    tqdm.write("Error in excuting {}: {}".format(gpkg, e))
+                    success = False
+                finally:
+                    # Save parts of the results into gpkg and restart the processing automatically
+                    df = pd.DataFrame(output, columns=["fid", fieldName])
+                    self.updateData(path, df, fieldName)
+            
+            bar.close()
+            if success:
+                return True
+            else:
+                return False
     
     @staticmethod
     def updateData(path: str, df: pd.DataFrame, fieldName: str) -> None:
@@ -66,63 +127,36 @@ class calculateFloodingInfluence:
     ) -> None:
         
         if specificeFile == []:
-            gpkgs = readFiles(roadPath).specifcFile(suffix=["gpkg"])
+            gpkgs = set(readFiles(roadPath).specifcFile(suffix=["gpkg"]))
         else:
-            gpkgs = specificeFile
+            gpkgs = set(specificeFile)
+        # Update log
+        log = os.path.join(roadPath, "log.json")
+        stature = loadJsonRecord.load(log, "Flooding_Road")
+        assert type(stature) is list
+        if len(stature) != 0:
+            for i in stature:
+                gpkgs.discard(i)
+            tqdm.write("The following gpkgs have already been processed and skipped: \n{}".format(stature))
         
         # for gpkg in gpkgs:
-        for gpkg in gpkgs:
-            path = os.path.join(roadPath, gpkg)
-
-            # Add field
-            conn = sqlite3.connect(path)
-            cursor = conn.cursor(factory=modifyTable)
-            cursor.addFields("edges", (fieldName, "Integer", None)) # Add fields if not exists
-            conn.commit()
-            conn.close()
-
-            # Initial gpkg data, skip the gpkg file which has been processed
-            self.initialClass.updateLayerInfo((path, "edges"))
-            gdf = gpd.read_file(path, layer="edges", encoding="utf-8")
-            gdf.drop(gdf.loc[~gdf[fieldName].isna()].index, inplace=True)
-            if gdf.shape[0] == 0:
-                gdf = None
-                gc.collect()
-                continue
-            bar = tqdm(total=gdf.shape[0], desc="Processing country {}".format(gpkg.split('.')[0]), unit="road")
-            gdf = None
-            gc.collect()
-
-            # Segment saving
-            gdf = gpd.read_file(path, layer="edges", encoding="utf-8")
-            gdf.drop(gdf.loc[~gdf[fieldName].isna()].index, inplace=True)
-            indexsArray = np.array_split(gdf.index, max(1, gdf.shape[0] // 10000)) # Save every 10000 times
-            output = []
-            futures = []
-            futuresToIndex = {} # Mapping future for debug
-            outputLock = threading.Lock()
-            for indexs in indexsArray:
-                try:
-                    excutor = ThreadPoolExecutor(max_workers=multiThread)
-                    for index in indexs:
-                        # Update null value
-                        future = excutor.submit(self.executeMethod, index, output, outputLock)
-                        futures.append(future)
-                        futuresToIndex[future] = index + 1
-                    for future in as_completed(futures):
-                        try:
-                            future.result()
-                            bar.update(1)
-                        except Exception as e:
-                            tqdm.write("Error in road with fid {}: {}".format(futuresToIndex[future], e))
-                except Exception as e:
-                    tqdm.write("Error in excuting {}: {}".format(gpkg, e))
-                finally:
-                    # Save parts of the results into gpkg and restart the processing automatically
-                    df = pd.DataFrame(output, columns=["fid", fieldName])
-                    self.updateData(path, df, fieldName)
+        futures = []
+        debugDict = {}
+        thread = int(multiThread) # ** 0.5
+        with ThreadPoolExecutor(max_workers=thread) as excutor:
+            for gpkg in gpkgs:
+                future = excutor.submit(self.calOneGpkg, roadPath, gpkg, fieldName, thread)
+                debugDict[future] = gpkg
+                futures.append(future)
             
-            bar.close()
+            for future in as_completed(futures):
+                gpkg = debugDict[future]
+                try:
+                    if future.result():
+                        stature.append(gpkg)
+                        loadJsonRecord.save(log, "Flooding_Road", stature)
+                except Exception as e:
+                    tqdm.write("Failed to process {}: {}".format(gpkg, e))
 
         return
 
@@ -131,5 +165,5 @@ if __name__ == "__main__":
         "test",
         "affectDays",
         specificeFile=["OSM_Nanjin_ThirdRoad.gpkg"],
-        multiThread=os.cpu_count() * 2 # type:ignore
+        multiThread=os.cpu_count() # type:ignore
     )

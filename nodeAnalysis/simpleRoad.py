@@ -61,7 +61,7 @@ class getSimpleRoad:
         if countries == set():
             allCountries = set(countries_by_name.keys()) # All upper
             # Exclude the countries that are already exist in the save path
-            existingFiles = readFiles(savePath).specifcFile(suffix=["gpkg"])
+            existingFiles = readFiles(savePath).specificFile(suffix=["gpkg"])
             existingCountries = set([COUNTRIES.get(f.split(".")[0]).name.upper() for f in existingFiles])
             allCountries = allCountries - existingCountries
         else:
@@ -78,27 +78,21 @@ class getSimpleRoad:
         excutor = ThreadPoolExecutor(max_workers=multiThread)
 
         for PN in allCountries:
-        #     future = excutor.submit(
-        #         self.getOneCountry,
-        #         PN,
-        #         savePath=savePath,
-        #         customFilter=customFilter,
-        #         multiThread=(bar, exceptionList, exceptionLock)
-        #     )
-        #     futures.append(future)
-        #     futuresToCountry[future] = PN  # Map future to country name
-        # for future in as_completed(futures):
-        #     try:
-        #         future.result()
-        #     except Exception as e:
-        #         tqdm.write("Error in get country {}: {}".format(futuresToCountry[future], e))
-
-            self.getOneCountry(
+            future = excutor.submit(
+                self.getOneCountry,
                 PN,
                 savePath=savePath,
                 customFilter=customFilter,
                 multiThread=(bar, exceptionList, exceptionLock)
             )
+            futures.append(future)
+            futuresToCountry[future] = PN  # Map future to country name
+        for future in as_completed(futures):
+            try:
+                future.result()
+            except Exception as e:
+                tqdm.write("Error in get country {}: {}".format(futuresToCountry[future], e))
+
         pd.DataFrame(
             exceptionList,
             columns=["Country", "Exception Times", "Exception Messages"],
@@ -183,7 +177,28 @@ if __name__ == "__main__":
         [\"highway\"~\"^motorway$|^trunk$|^primary$|^secondary$|^tertiary$|^motorway_link$| \
         ^trunk_link$|^primary_link$|^secondary_link$|^tertiary_link$\"] \
     "
-    getSimpleRoad().getAllCountriesNetworksGraph("C:\\0_Data\\globalRoad", customFilter=customFilter, multiThread=1) # type: ignore
+    getSimpleRoad().getAllCountriesNetworksGraph("C:\\0_PolyU\\roadsGraph", customFilter=customFilter, multiThread=1) # type: ignore
 
     # Following steps are not implemented yet
     # Nodes -> Tissen polygons -> connect nodes with EVCS and population
+
+    # Un-download:
+    # {'COCOS (KEELING) ISLANDS',
+    #  'CANADA',
+    #  'SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS',
+    #  'FRANCE',
+    #  'ANTARCTICA',
+    #  'JAPAN',
+    #  'BOUVET ISLAND',
+    #  'SINT MAARTEN (DUTCH PART)',
+    #  'KIRIBATI',
+    #  'CHINA',
+    #  'HEARD ISLAND AND MCDONALD ISLANDS',
+    #  'HOLY SEE',
+    #  'PITCAIRN',
+    #  'NORWAY',
+    #  'RUSSIAN FEDERATION',
+    #  'UNITED STATES OF AMERICA',
+    #  'TOKELAU',
+    #  'UNITED STATES MINOR OUTLYING ISLANDS',
+    #  'NEW CALEDONIA'}

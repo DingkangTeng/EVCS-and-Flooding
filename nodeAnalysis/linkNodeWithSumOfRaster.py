@@ -1,22 +1,24 @@
-import sys, gc, sqlite3, os
+import sys, sqlite3, os, threading, psutil
 import pandas as pd
 import geopandas as gpd
 import numpy as np
 import rasterio as rio
 from tqdm import tqdm
 from scipy.spatial import KDTree
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 from rasterio.windows import Window
 from rasterio.transform import xy
 
 sys.path.append(".") # Set path to the roots
 
 from function.sqlite import spatialiteConnection, modifyTable
-from function.readFiles import readFiles
+from function.readFiles import readFiles, loadJsonRecord
 
 class linkNodeWithSumOfRaster:
-    def __init__(self) -> None:
-        pass
+    __slots__ = ["CHUNK_SIZE"]
+
+    def __init__(self, chunkSize: int = 5120) -> None:
+        self.CHUNK_SIZE = chunkSize
 
     @staticmethod
     def updateData(path: str, df: pd.DataFrame, fieldName: str) -> None:
@@ -32,7 +34,7 @@ class linkNodeWithSumOfRaster:
             UPDATE nodes
             SET {} = (SELECT tempTable.{}
                         FROM tempTable 
-                        WHERE tempTable.nodesFid = nodes.fid),
+                        WHERE tempTable.nodesFid = nodes.fid)
             WHERE {} = 0
             """.format(
                 fieldName,
@@ -46,14 +48,99 @@ class linkNodeWithSumOfRaster:
 
         return
     
-    def processOneLayer(self, layerNode: tuple[str, str], rasters: list[str], fieldName: str) -> None:
+    # Read raster data in multi-thread/multi-process
+    def readOneTif(
+            self,
+            tree: KDTree, dataNode: gpd.GeoDataFrame, fieldName: str,
+            pixelSumsIn: np.ndarray, raster: str,
+            maxDistance: int | None = None, chunkSize: int = 5120
+        ) -> list[dict]:
+        pixelSums = pixelSumsIn.copy()
+        with rio.open(raster, chunks=True, options=["NUM_THREADS=ALL_CPUS"]) as src:
+            rasterCrs = src.crs
+            width, height = src.width, src.height
+            transform = src.transform
+            # Calculat chunks
+            nChunksX = int(np.ceil(width / chunkSize))
+            nChunksY = int(np.ceil(height / chunkSize))
+            # Transform node again if crs is different, normally do not need
+            if dataNode.crs != rasterCrs:
+                dataNode = dataNode.to_crs(rasterCrs)
+                node = np.array(list(zip(dataNode.geometry.x, dataNode.geometry.y)))
+                tree = KDTree(node)
+            
+            for i in range(nChunksX):
+                for j in range(nChunksY):
+                    colOff = i * chunkSize
+                    rowOff = j * chunkSize
+                    windowWidth = min(chunkSize, width - colOff)
+                    windowHeight = min(chunkSize, height - rowOff)
+                    window = Window(colOff, rowOff, windowWidth, windowHeight) # type: ignore
+                    chunk = src.read(1, window=window)
+                    
+                    # Calculates coordinate of pixels center
+                    rows, cols = np.indices(chunk.shape)
+                    global_rows = rowOff + rows
+                    global_cols = colOff + cols
+                    
+                    # Transform cols and rows index into coordinates
+                    x_coords, y_coords = xy(
+                        transform, 
+                        global_rows.ravel(), 
+                        global_cols.ravel()
+                    )
+                    coords = np.column_stack((x_coords, y_coords))
+                    
+                    # Query the nearest index
+                    if maxDistance is not None:
+                        distances, indices = tree.query(coords, distance_upper_bound=maxDistance)
+                        # Mark the indexs that exceeds the threshold
+                        overThresholdMask = (distances > maxDistance) | np.isinf(distances)
+                        indices[overThresholdMask] = -1 # type: ignore
+                    else:
+                        # No distance threshold
+                        _, indices = tree.query(coords)
+                    
+                    # Updates calculates results
+                    flatChunk = chunk.ravel()
+                    for k in range(dataNode.shape[0]):
+                        mask = (indices == k)
+                        values = flatChunk[mask]
+                        if values.size > 0:
+                            pixelSums[k] += np.sum(values)
+            
+            results = []
+            for i in range(dataNode.shape[0]):
+                results.append({
+                    "nodesFid": i + 1,
+                    fieldName: pixelSums[i],
+                })
+        
+        return results
+    
+    def processOneLayer(self, layerNode: tuple[str, str], rastersDict: dict[str, str], maxThread: int = 1) -> None:
         # Read node layer
         path = layerNode[0]  # For updates data into gpkg
+        logPath = os.path.dirname(path)
+        nodeName = os.path.basename(path)
+        # Update log
+        log = os.path.join(logPath, "log.json")
+        stature = loadJsonRecord.load(log, "populationRaster", {})
+        assert type(stature) is dict
+        processedRaster = stature.get(nodeName, [])
+        rasterSet = set(rastersDict.keys())
+        if len(processedRaster) != 0:
+            for i in processedRaster:
+                rasterSet.discard(i)
+            tqdm.write("The following rasters for \"{}\" have already been processed and skipped: \n{}".format(nodeName, processedRaster))
+        if len(rasterSet) == 0:
+            tqdm.write("The following gpkgs have already been processed and skipped: \n{}".format(nodeName))
+            return
+        
+        # Read one raster to get crs
         dataNode = gpd.read_file(path, layer=layerNode[1], encoding="utf-8")
         pixelSums = np.zeros(dataNode.shape[0], dtype=np.float64)
-
-        # Read one raster to get crs
-        with rio.open(rasters[0]) as src:
+        with rio.open(list(rastersDict.keys())[0]) as src:
             rasterCrs = src.crs
             if dataNode.crs != rasterCrs:
                 dataNode = dataNode.to_crs(rasterCrs)
@@ -61,89 +148,78 @@ class linkNodeWithSumOfRaster:
         # Build KD-Tree
         node = np.array(list(zip(dataNode.geometry.x, dataNode.geometry.y)))
         tree = KDTree(node)
-
-        # Read raster data in multi-thread/multi-process
-        def readOneTif(tree: KDTree, dataNode: gpd.GeoDataFrame, pixelSumsIn: np.ndarray, raster: str, maxDistance: int | None = None, chunkSize: int = 10240) -> None:
-            pixelSums = pixelSumsIn.copy()
-            with rio.open(raster, chunks=True, options=["NUM_THREADS=ALL_CPUS"]) as src:
-                rasterCrs = src.crs
-                width, height = src.width, src.height
-                transform = src.transform
-                # Calculat chunks
-                nChunksX = int(np.ceil(width / chunkSize))
-                nChunksY = int(np.ceil(height / chunkSize))
-                totalChunks = nChunksX * nChunksY
-                # Transform node again if crs is different, normally do not need
-                if dataNode.crs != rasterCrs:
-                    dataNode = dataNode.to_crs(rasterCrs)
-                    node = np.array(list(zip(dataNode.geometry.x, dataNode.geometry.y)))
-                    tree = KDTree(node)
-                
-                for i in range(nChunksX):
-                    for j in range(nChunksY):
-                        colOff = i * chunkSize
-                        rowOff = j * chunkSize
-                        windowWidth = min(chunkSize, width - colOff)
-                        windowHeight = min(chunkSize, height - rowOff)
-                        window = Window(colOff, rowOff, windowWidth, windowHeight) # type: ignore
-                        chunk = src.read(1, window=window)
-                        
-                        # Calculates coordinate of pixels center
-                        rows, cols = np.indices(chunk.shape)
-                        global_rows = rowOff + rows
-                        global_cols = colOff + cols
-                        
-                        # Transform cols and rows index into coordinates
-                        x_coords, y_coords = xy(
-                            transform, 
-                            global_rows.ravel(), 
-                            global_cols.ravel()
-                        )
-                        coords = np.column_stack((x_coords, y_coords))
-                        
-                        # Query the nearest index
-                        if maxDistance is not None:
-                            distances, indices = tree.query(coords, distance_upper_bound=maxDistance)
-                            # Mark the indexs that exceeds the threshold
-                            overThresholdMask = (distances > maxDistance) | np.isinf(distances)
-                            indices[overThresholdMask] = -1
-                        else:
-                            # No distance threshold
-                            _, indices = tree.query(coords)
-                        
-                        # Updates calculates results
-                        flatChunk = chunk.ravel()
-                        for k in range(dataNode.shape[0]):
-                            mask = (indices == k)
-                            values = flatChunk[mask]
-                            if values.size > 0:
-                                pixelSums[k] += np.sum(values)
-                
-                results = []
-                for i in range(dataNode.shape[0]):
-                    results.append({
-                        "fid": i + 1,
-                        "pixel_sum": pixelSums[i],
-                    })
-                
-                # Updates data into gpkg
-                # Test
-                pd.DataFrame(results).to_csv("test//b(with distance).csv", encoding="utf-8")
-            
-            return
         
-        readOneTif(tree, dataNode, pixelSums, rasters[0], 1000)
+        futures = []
+        debugDict = {}
+        with ProcessPoolExecutor(max_workers=maxThread) as excutor:
+            for raster in rasterSet:
+                fileSize = os.path.getsize(raster)
+                while True:
+                    if fileSize < psutil.virtual_memory().available \
+                        or psutil.virtual_memory().available > self.CHUNK_SIZE * self.CHUNK_SIZE * 256: # Check if memory is enough
+                            break
+                future = excutor.submit(self.readOneTif, tree, dataNode, rastersDict[raster], pixelSums, raster)
+                debugDict[future] = raster
+                futures.append(future)
+            
+            for future in as_completed(futures):
+                raster = debugDict[future]
+                try:
+                    results = future.result()
+                    self.updateData(path, pd.DataFrame(results), rastersDict[raster])
+                except Exception as e:
+                    tqdm.write("Error in processing {}: {}".format(raster, e))
+                else:
+                    processedRaster.append(raster)
 
-        # self.updateData(path, pd.DataFrame(results), fieldName)
+        loadJsonRecord.save(log, "populationRaster", {nodeName: processedRaster})
+        
+        return
+
+    def processAll(self, pathGpke: str, tifRootPath: str, maxThread: int = 1) -> None:
+        allGpkgs = set(readFiles(pathGpke).specificFile(suffix=["gpkg"]))
+        # Checking processed gpkg will be processed in slef.processOneLayer
+        bar = tqdm(total = len(allGpkgs), desc="Running KD-Trees and calculating populations", unit="layer")
+        futures = []
+        debugDict = {}
+        with ProcessPoolExecutor(max_workers=maxThread) as excutor:
+            for gpkg in allGpkgs:
+                countryName = gpkg.split('.')[0]
+                path = os.path.join(pathGpke, gpkg)
+                # get all tifs
+                tifDict = {}
+                for tifs in readFiles(tifRootPath).specificFloder(contains=["population_"]):
+                    tifsPath = os.path.join(tifRootPath, tifs)
+                    tif = readFiles(tifsPath).specificFile(suffix=["tif"], contains=[countryName])
+                    if len(tif) == 0:
+                        raise RuntimeError("No corresponding tif file for {}".format(countryName))
+                    else:
+                        tif = tif[0]
+                    tifDict[os.path.join(tifsPath, tif)] = tifs # tifs looks like population_All / population_All_children ...
+                future = excutor.submit(self.processOneLayer, (path, "nodes"), tifDict, maxThread)
+                futures.append(future)
+                debugDict[future] = "{}: {}".format(countryName)
+                
+            for future in as_completed(futures):
+                countryName = debugDict[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    tqdm.write("Error in processing {}.gpkg: {}".format(countryName, e))
+                else:
+                    bar.update(1)
+        
+        bar.close()
 
         return
 
 if __name__ == "__main__":
-    linkNodeWithSumOfRaster().processOneLayer(
-        ("test//OSM_Nanjin_ThirdRoad.gpkg", "nodes"),
-        # ["test//Flooding_Nanjin2.tif"],
-        ["C:\\0_PolyU\\population_All\\CHN_allGender_allAge_merge.tif"],
-        "allPopulation"
-    )
+    # linkNodeWithSumOfRaster(10240).processOneLayer(
+    #     ("test//OSM_Nanjin_ThirdRoad.gpkg", "nodes"),
+    #     {"test//Flooding_Nanjin2.tif": "allPopulation"},
+    #     os.cpu_count()  # type: ignore
+    # )
+
+    linkNodeWithSumOfRaster().processAll(r"C:\\0_PolyU\\roadsGraph", r"C:\\0_PolyU", os.cpu_count()) # type: ignore
 
     # 10240*10240: 23G consume

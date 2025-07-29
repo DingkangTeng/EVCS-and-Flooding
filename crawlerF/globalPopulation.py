@@ -83,7 +83,7 @@ class globalPopulation(crawler):
         iso = iso[-3]
         savePath2 = os.path.join(savePath, iso)
         mkdir(savePath2)
-        existFile = readFiles(savePath2).specifcFile(suffix=["tif"])
+        existFile = readFiles(savePath2).specificFile(suffix=["tif"])
         for i in a:
             if not isinstance(i, Tag):
                 continue
@@ -107,7 +107,7 @@ class globalPopulation(crawler):
         url = "https://data.worldpop.org/GIS/AgeSex_structures/Global_2000_2020_Constrained_UNadj/2020/{}//{}"
         age = ["0", "1"] + [str(5 * x) for x in range(1, 17)]
         mkdir(savePath)
-        existFile = readFiles(savePath).specifcFile(suffix=["tif"])
+        existFile = readFiles(savePath).specificFile(suffix=["tif"])
         for g in ["f", "m"]:
             for a in age:
                 file = fileName.format(iso.lower(), g, a)
