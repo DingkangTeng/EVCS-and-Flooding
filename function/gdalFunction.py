@@ -1,7 +1,7 @@
 import gc
 from osgeo import gdal
 from contextlib import contextmanager
-from typing import Generator, Any
+from typing import Generator
 
 @contextmanager
 def gdalDatasets(path: str, close: bool = True) -> Generator[gdal.Dataset, None, None]:

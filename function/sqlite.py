@@ -1,6 +1,7 @@
 import sqlite3
-import pandas as pd
 from typing import Any
+
+FID_INDEX = "idx_fid"
 
 # Load SpatiaLite extension
 class spatialiteConnection(sqlite3.Connection):
@@ -42,27 +43,19 @@ class modifyTable(sqlite3.Cursor):
             if fieldName not in existingColumns:
                 if initialValue is not None:
                     self.execute(
+                        f"""
+                        ALTER TABLE {tableName}
+                        ADD COLUMN {fieldName} {colType}
+                        DEFAULT {initialValue}
                         """
-                        ALTER TABLE {}
-                        ADD COLUMN {} {}
-                        DEFAULT {}
-                        """.format(
-                            tableName,
-                            fieldName,
-                            colType,
-                            initialValue
-                        )
                     )
                 else:
                     self.execute(
+                        f"""
+                        ALTER TABLE {tableName}
+                        ADD COLUMN {fieldName} {colType}
                         """
-                        ALTER TABLE {}
-                        ADD COLUMN {} {}
-                        """.format(
-                            tableName,
-                            fieldName,
-                            colType
-                        )
                     )
+            self.execute(f"CREATE INDEX IF NOT EXISTS idx_{fieldName} ON {tableName} ({fieldName})")
 
         return

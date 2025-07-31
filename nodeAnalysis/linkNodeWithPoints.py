@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.append(".") # Set path to the roots
 
-from function.sqlite import spatialiteConnection, modifyTable
+from function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
 from function.readFiles import readFiles, loadJsonRecord
 
 class linkNodeWithPoints:
@@ -22,8 +22,11 @@ class linkNodeWithPoints:
         cursor = conn.cursor(factory=modifyTable)
         # Add field
         cursor.addFields("nodes", ("EVCSNum", "Integer", None), ("EVCSFids", "Text", None))
+        cursor.execute(f"CREATE INDEX IF NOT EXISTS {FID_INDEX} ON nodes (fid)")
         # Add data
         df.to_sql("tempTable", conn, if_exists="replace", index=False)
+        cursor.execute(f"CREATE INDEX IF NOT EXISTS {FID_INDEX} ON tempTable (fid)")
+        conn.commit()
         cursor.execute(
             """
             UPDATE nodes

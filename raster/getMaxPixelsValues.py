@@ -47,6 +47,7 @@ class getMaxPixelsValues(getPixelsValues):
             # Coordinates projection
             assert isinstance(self.layerRef, osr.SpatialReference)
             if not self.layerRef.IsSame(self.ref):
+                # There seems to have some problem with projection
                 transform = osr.CoordinateTransformation(self.layerRef, self.ref)
                 # points = [
                 #     (XMin, YMin),
@@ -92,8 +93,6 @@ class getMaxPixelsValues(getPixelsValues):
                 # Creat layer mask
                 cols = memDs.RasterXSize
                 rows = memDs.RasterYSize
-                if not isinstance(driver, gdal.Driver):
-                    raise RuntimeError("Memory driver not available.")
                 maskDs = driver.Create('', cols, rows, 1, gdal.GDT_Byte)
                 if not isinstance(maskDs, gdal.Dataset):
                     raise RuntimeError("Failed to create memory dataset for mask.")
@@ -136,7 +135,6 @@ class getMaxPixelsValues(getPixelsValues):
                 maskDs.FlushCache()
                 maskDs.Destroy()
             if outDs:
-                assert isinstance(outDs, gdal.Dataset)
                 outDs.FlushCache()
                 outDs.Destroy()
             if isQuery:

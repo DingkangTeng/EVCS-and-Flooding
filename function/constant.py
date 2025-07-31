@@ -793,6 +793,5 @@ COUNTRIES_GFD = [{
   "bands": baseBands
 }]
 
-from iso3166 import countries_by_name
-COUNTRIES_ALL = countries_by_name.keys()
-print(COUNTRIES_ALL, "countries loaded")
+# from iso3166 import countries_by_name
+# COUNTRIES_ALL = countries_by_name.keys()

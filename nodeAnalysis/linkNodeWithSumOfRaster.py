@@ -1,24 +1,24 @@
-import sys, sqlite3, os, threading, psutil
+import sys, sqlite3, os, time, psutil
 import pandas as pd
 import geopandas as gpd
 import numpy as np
 import rasterio as rio
 from tqdm import tqdm
 from scipy.spatial import KDTree
-from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
+from concurrent.futures import as_completed, ProcessPoolExecutor
 from rasterio.windows import Window
 from rasterio.transform import xy
 
 sys.path.append(".") # Set path to the roots
 
-from function.sqlite import spatialiteConnection, modifyTable
+from function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
 from function.readFiles import readFiles, loadJsonRecord
 
 class linkNodeWithSumOfRaster:
-    __slots__ = ["CHUNK_SIZE"]
+    __slots__ = ["BLOCK_SIZE"]
 
-    def __init__(self, chunkSize: int = 5120) -> None:
-        self.CHUNK_SIZE = chunkSize
+    def __init__(self, blockSize: int = 4096) -> None:
+        self.BLOCK_SIZE = blockSize
 
     @staticmethod
     def updateData(path: str, df: pd.DataFrame, fieldName: str) -> None:
@@ -27,20 +27,19 @@ class linkNodeWithSumOfRaster:
         cursor = conn.cursor(factory=modifyTable)
         # Add field
         cursor.addFields("nodes", (fieldName, "Real", 0))
+        cursor.execute(f"CREATE INDEX IF NOT EXISTS {FID_INDEX} ON nodes (fid)")
         # Add data
         df.to_sql("tempTable", conn, if_exists="replace", index=False)
+        cursor.execute(f"CREATE INDEX IF NOT EXISTS {FID_INDEX} ON tempTable (fid)")
+        conn.commit()
         cursor.execute(
-            """
+            f"""
             UPDATE nodes
-            SET {} = (SELECT tempTable.{}
+            SET {fieldName} = (SELECT tempTable.{fieldName}
                         FROM tempTable 
                         WHERE tempTable.nodesFid = nodes.fid)
-            WHERE {} = 0
-            """.format(
-                fieldName,
-                fieldName,
-                fieldName
-            )
+            WHERE {fieldName} = 0
+            """
         )
         cursor.execute("DROP TABLE IF EXISTS tempTable")
         conn.commit()
@@ -53,7 +52,7 @@ class linkNodeWithSumOfRaster:
             self,
             tree: KDTree, dataNode: gpd.GeoDataFrame, fieldName: str,
             pixelSumsIn: np.ndarray, raster: str,
-            maxDistance: int | None = None, chunkSize: int = 5120
+            maxDistance: int | None = None, blockSize: int = 4096
         ) -> list[dict]:
         pixelSums = pixelSumsIn.copy()
         with rio.open(raster, chunks=True, options=["NUM_THREADS=ALL_CPUS"]) as src:
@@ -61,8 +60,8 @@ class linkNodeWithSumOfRaster:
             width, height = src.width, src.height
             transform = src.transform
             # Calculat chunks
-            nChunksX = int(np.ceil(width / chunkSize))
-            nChunksY = int(np.ceil(height / chunkSize))
+            nChunksX = int(np.ceil(width / blockSize))
+            nChunksY = int(np.ceil(height / blockSize))
             # Transform node again if crs is different, normally do not need
             if dataNode.crs != rasterCrs:
                 dataNode = dataNode.to_crs(rasterCrs)
@@ -71,10 +70,10 @@ class linkNodeWithSumOfRaster:
             
             for i in range(nChunksX):
                 for j in range(nChunksY):
-                    colOff = i * chunkSize
-                    rowOff = j * chunkSize
-                    windowWidth = min(chunkSize, width - colOff)
-                    windowHeight = min(chunkSize, height - rowOff)
+                    colOff = i * blockSize
+                    rowOff = j * blockSize
+                    windowWidth = min(blockSize, width - colOff)
+                    windowHeight = min(blockSize, height - rowOff)
                     window = Window(colOff, rowOff, windowWidth, windowHeight) # type: ignore
                     chunk = src.read(1, window=window)
                     
@@ -156,8 +155,10 @@ class linkNodeWithSumOfRaster:
                 fileSize = os.path.getsize(raster)
                 while True:
                     if fileSize < psutil.virtual_memory().available \
-                        or psutil.virtual_memory().available > self.CHUNK_SIZE * self.CHUNK_SIZE * 256: # Check if memory is enough
+                        or psutil.virtual_memory().available > self.BLOCK_SIZE * self.BLOCK_SIZE * 256: # Check if memory is enough
                             break
+                    else:
+                        time.sleep(10)
                 future = excutor.submit(self.readOneTif, tree, dataNode, rastersDict[raster], pixelSums, raster)
                 debugDict[future] = raster
                 futures.append(future)

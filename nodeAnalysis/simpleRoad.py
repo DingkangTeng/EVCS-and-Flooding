@@ -1,11 +1,12 @@
-import os, sys, psutil, threading
+import os, sys, psutil
 import osmnx as ox
 import networkx as nx
 import pandas as pd
 from iso3166 import countries_by_name
 from iso3166 import countries as COUNTRIES
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import Any
 
 sys.path.append(".") # Set path to the roots
 
@@ -74,24 +75,29 @@ class getSimpleRoad:
         futures = []
         futuresToCountry = {} # Store futures to country mapping for debugging
         exceptionList = []
-        exceptionLock = threading.Lock()
-        excutor = ThreadPoolExecutor(max_workers=multiThread)
 
-        for PN in allCountries:
-            future = excutor.submit(
-                self.getOneCountry,
-                PN,
-                savePath=savePath,
-                customFilter=customFilter,
-                multiThread=(bar, exceptionList, exceptionLock)
-            )
-            futures.append(future)
-            futuresToCountry[future] = PN  # Map future to country name
-        for future in as_completed(futures):
-            try:
-                future.result()
-            except Exception as e:
-                tqdm.write("Error in get country {}: {}".format(futuresToCountry[future], e))
+        with ProcessPoolExecutor(max_workers=multiThread) as excutor:
+            for country in allCountries:
+                future = excutor.submit(
+                    self.getOneCountry,
+                    country,
+                    savePath=savePath,
+                    customFilter=customFilter,
+                    singleThread = False
+                )
+                futures.append(future)
+                futuresToCountry[future] = country  # Map future to country name
+            for future in as_completed(futures):
+                country = futuresToCountry[future]
+                try:
+                    result = future.result()
+                except Exception as e:
+                    tqdm.write("Error in get country {}: {}".format(country, e))
+                else:
+                    bar.update(1)
+                    bar.set_description("{} finished".format(country))
+                    if result is not None:
+                        exceptionList.append(result)
 
         pd.DataFrame(
             exceptionList,
@@ -106,58 +112,59 @@ class getSimpleRoad:
     
     @staticmethod
     def getOneCountry(
-        PN: str,
+        country: str,
         savePath: str,
+        truncateByEdge: bool = False,
         customFilter: str | None = None,
-        multiThread: tuple[tqdm, list[list], threading.Lock] | None = None,
-        # bar, exceptionList, exceptionLock
+        singleThread: bool = True
     ) -> None | list:
         
-        if multiThread is None:
-            print("Processing country: {}".format(PN))
-        else:
-            multiThread[0].set_description("Processing country: {}".format(PN))
-            multiThread[0].update(1)
-        iso3 = countries_by_name[PN].alpha3 if PN in countries_by_name else PN
+        if singleThread:
+            print("Processing country: {}".format(country))
+
+        iso3 = countries_by_name[country].alpha3 if country in countries_by_name else country
         
         exceptionTimes = 0
         exceptionCountry = ["", 0, []]
         while True:
-            if PN in ["KIRIBATI", "ANTARCTICA", "NEW CALEDONIA", "PITCAIRN"]:
-                exceptionCountry = [PN, 1, ["Queried too large area with sea or no data."]]
+            if country in ["KIRIBATI", "ANTARCTICA", "NEW CALEDONIA", "PITCAIRN", "UNITED STATES MINOR OUTLYING ISLANDS"]:
+                exceptionCountry = [country, 1, ["Queried too large area with sea or no data."]]
                 return exceptionCountry
+            elif country in [
+                "HOLY SEE", "PITCAIRN", "COCOS (KEELING) ISLANDS", "SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS",
+                "HEARD ISLAND AND MCDONALD ISLANDS", "TOKELAU"
+            ]: # No data country
+                return
             try:
                 G = ox.graph_from_place(
-                    PN,
+                    country,
                     network_type="drive",
                     retain_all=True,
+                    truncate_by_edge = truncateByEdge,
                     custom_filter=customFilter
                 )
             except Exception as e:
                     if exceptionTimes == 0:
-                        exceptionCountry[0] = PN
+                        exceptionCountry[0] = country
                         exceptionCountry[1] = 1
                         exceptionCountry[2].append(str(e))
-                        PN = PN.split(",")[0]  # Handle cases like "United States, California"
+                        country = country.split(",")[0]  # Handle cases like "United States, California"
                         exceptionTimes += 1
                     elif exceptionTimes == 1:
                         exceptionCountry[1] += 1
                         exceptionCountry[2].append(str(e))
-                        if multiThread is None:
+                        if singleThread:
                             print(e)
                         else:
-                            with multiThread[2]:
-                                multiThread[1].append(exceptionCountry)
-                            tqdm.write("Error in geo-encoding after split country name to {}: {}".format(PN, e))
-                            multiThread[0].update(1)
+                            tqdm.write("Error in geo-encoding after split country name to {}: {}".format(country, e))
                         
                         return exceptionCountry
             else:
                 break
 
-        G_proj = ox.project_graph(G)
+        G_proj = ox.project_graph(G, to_latlong=True)
         #Merge juncted intersections
-        G2 = ox.consolidate_intersections(G_proj, rebuild_graph=True, tolerance=10, dead_ends=True)
+        G2 = ox.consolidate_intersections(G_proj, rebuild_graph=True, tolerance=0.0001, dead_ends=True)
         G2 = nx.MultiDiGraph(G2, network_type="drive")
 
         ox.save_graph_geopackage(
@@ -167,8 +174,39 @@ class getSimpleRoad:
             encoding="utf-8"
         )
 
-        if multiThread is not None:
-            multiThread[0].update(1)
+        return None
+    
+    @staticmethod
+    def getOneCountryFromFile(
+        filePath: str,
+        country: str,
+        savePath: str,
+        truncateByEdge: bool = False,
+        customFilter: str | None = None,
+        singleThread: bool = True
+    ) -> None | list:
+        
+        if singleThread is None:
+            print("Processing country: {}".format(country))
+
+        iso3 = countries_by_name[country].alpha3 if country in countries_by_name else country
+        
+        G = ox.graph_from_xml(
+            filePath,
+            retain_all=True
+        )
+
+        G_proj = ox.project_graph(G, to_latlong=True)
+        #Merge juncted intersections
+        G2 = ox.consolidate_intersections(G_proj, rebuild_graph=True, tolerance=0.0001, dead_ends=True)
+        G2 = nx.MultiDiGraph(G2, network_type="drive")
+
+        ox.save_graph_geopackage(
+            G2,
+            filepath=os.path.join(savePath, "{}.gpkg".format(iso3)),
+            directed=True,
+            encoding="utf-8"
+        )
 
         return None
     
@@ -177,28 +215,15 @@ if __name__ == "__main__":
         [\"highway\"~\"^motorway$|^trunk$|^primary$|^secondary$|^tertiary$|^motorway_link$| \
         ^trunk_link$|^primary_link$|^secondary_link$|^tertiary_link$\"] \
     "
-    getSimpleRoad().getAllCountriesNetworksGraph("C:\\0_PolyU\\roadsGraph", customFilter=customFilter, multiThread=1) # type: ignore
-
-    # Following steps are not implemented yet
-    # Nodes -> Tissen polygons -> connect nodes with EVCS and population
+    # getSimpleRoad().getAllCountriesNetworksGraph("C:\\0_PolyU\\roadsGraph", customFilter=customFilter, multiThread=1) # type: ignore
+    getSimpleRoad().getOneCountry("FRANCE", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
 
     # Un-download:
-    # {'COCOS (KEELING) ISLANDS',
-    #  'CANADA',
-    #  'SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS',
+    # 分别读取有边界点不重合的问题
+    # {'CANADA',
     #  'FRANCE',
-    #  'ANTARCTICA',
     #  'JAPAN',
-    #  'BOUVET ISLAND',
-    #  'SINT MAARTEN (DUTCH PART)',
-    #  'KIRIBATI',
     #  'CHINA',
-    #  'HEARD ISLAND AND MCDONALD ISLANDS',
-    #  'HOLY SEE',
-    #  'PITCAIRN',
     #  'NORWAY',
     #  'RUSSIAN FEDERATION',
-    #  'UNITED STATES OF AMERICA',
-    #  'TOKELAU',
-    #  'UNITED STATES MINOR OUTLYING ISLANDS',
-    #  'NEW CALEDONIA'}
+    #  'UNITED STATES OF AMERICA'}

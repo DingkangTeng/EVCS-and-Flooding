@@ -1,4 +1,4 @@
-import gc
+import gc, time
 from osgeo import ogr, gdal
 from contextlib import contextmanager
 from typing import Generator
@@ -18,8 +18,17 @@ def creatField(layer: ogr.Layer, fieldName: str, fieldType: int, maxLength: int 
 
 @contextmanager
 def orgDatasets(path: str, openType: int = 0, close: bool = True) -> 'Generator[gdal.Dataset, None, None]':
-    ds = ogr.Open(path, openType) # 0 is read only, 1 is writable
+    ds = None
     try:
+        # Retray open when occupied.
+        while True:
+            try:
+                ds = ogr.Open(path, openType) # 0 is read only, 1 is writable
+            except:
+                time.sleep(10)
+                continue
+            else:
+                break
         if not isinstance(ds, gdal.Dataset):
             raise RuntimeError("Failed to open layer dataset: {}".format(path))
         yield ds
@@ -27,6 +36,6 @@ def orgDatasets(path: str, openType: int = 0, close: bool = True) -> 'Generator[
         close = True
         raise RuntimeError
     finally:
-        if close:
+        if close and ds is not None:
             ds.Destroy()
             gc.collect()

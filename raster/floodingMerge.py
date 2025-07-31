@@ -119,7 +119,7 @@ class floodingMerge:
                 bar.set_description("Not enough memory of {}MB to read {}. Waiting.. ".format(fileSize // (1024 ** 2), tif))
                 time.sleep(0.1)
                 bar.set_description("Not enough memory of {}MB to read {}. Waiting...".format(fileSize // (1024 ** 2), tif))
-                time.sleep(0.1)
+                time.sleep(10)
                 gc.collect()
                 threading.Event().wait(1)
         flooding = z.read(tif)
@@ -139,13 +139,6 @@ class floodingMerge:
             premWater: np.ndarray = dataset.read(5)
             # Calculate with CPU
             data = data * (~premWater.astype("bool"))
-            # # Calculate with GPU
-            # dataWp = wp.array(data, dtype=int)
-            # premWaterWp = wp.array(premWater, dtype=bool)
-            # outputWp = wp.zeros_like(dataWp)
-            # wp.launch(removePW, dim=data.size, inputs=[dataWp, premWaterWp, outputWp])
-            # data = np.array(outputWp)
-
             data = np.where(data == np.nan, 0, data) # Change NaN to 0, No data is 0
         
         

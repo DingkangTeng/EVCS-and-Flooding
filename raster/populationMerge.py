@@ -1,10 +1,10 @@
 import sys, os, threading, gc, shutil, psutil, time
 import pandas as pd
 import numpy as np
-# try:
-#     import cupy as np
-# except Exception as e:
-#     print(e, "Use CPU instead.")
+try:
+    import cupy as np
+except Exception as e:
+    print(e, "Use CPU instead.")
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from osgeo import gdal
@@ -107,15 +107,23 @@ class populationMerge(floodingMerge):
         datasets = [os.path.join(path, fp) for fp in datas]
         
 
-        # Check available memeory
+        # Check available memeory and GPU memory
+        blockTotalSize = self.BLOCK_SIZE * self.BLOCK_SIZE * 256
         while True:
             totalSize = sum(os.path.getsize(d) for d in datasets)
-            if totalSize // 2 < psutil.virtual_memory().available: # Check if memory is enough
-                if bar is None:
-                    tqdm.write("Mosacing {}".format(country))
-                else:
-                    bar.set_description("Mosacing {}".format(country))
-                break
+            memoryReamin = psutil.virtual_memory().available
+            if np.__name__ == "cupy":
+                gpuRemain, _ = np.cuda.Device().mem_info # type: ignore
+            else:
+                gpuRemain = totalSize + 1
+            # Check if memory is enough, if use GPU, check if GPU memory is enough:
+            if (totalSize < memoryReamin or memoryReamin > blockTotalSize) \
+                and (not (gpuRemain < totalSize and gpuRemain < blockTotalSize)):
+                    if bar is None:
+                        tqdm.write("Mosacing {}".format(country))
+                    else:
+                        bar.set_description("Mosacing {}".format(country))
+                    break
             else:
                 if bar is None:
                     tqdm.write("Not enough memory of {}MB to read {}. Waiting   ".format(totalSize // (1024 ** 2), country))
@@ -125,7 +133,7 @@ class populationMerge(floodingMerge):
                     tqdm.write("Not enough memory of {}MB to read {}. Waiting.. ".format(totalSize // (1024 ** 2), country))
                     time.sleep(0.1)
                     tqdm.write("Not enough memory of {}MB to read {}. Waiting...".format(totalSize // (1024 ** 2), country))
-                    time.sleep(0.1)
+                    time.sleep(10)
                 else:
                     bar.set_description("Not enough memory of {}MB to read {}. Waiting   ".format(totalSize // (1024 ** 2), country))
                     time.sleep(0.1)
@@ -134,7 +142,7 @@ class populationMerge(floodingMerge):
                     bar.set_description("Not enough memory of {}MB to read {}. Waiting.. ".format(totalSize // (1024 ** 2), country))
                     time.sleep(0.1)
                     bar.set_description("Not enough memory of {}MB to read {}. Waiting...".format(totalSize // (1024 ** 2), country))
-                    time.sleep(0.1)
+                    time.sleep(10)
                 gc.collect()
                 threading.Event().wait(1)
 
@@ -175,41 +183,43 @@ class populationMerge(floodingMerge):
             outBand.SetNoDataValue(0)
             outBand.Fill(0)
             
-            # Process with strip block
+            # Process with block
             for YOffset in range(0, YSize, self.BLOCK_SIZE):
                 YBlock = min(self.BLOCK_SIZE, YSize - YOffset)
-                blockShape = (YBlock, XSize)
-                blockSum = np.zeros(blockShape, dtype=np.float32)
+                for XOffset in range(0, XSize, self.BLOCK_SIZE):
+                    XBlock = min(self.BLOCK_SIZE, XSize - XOffset)
+                    blockShape = (YBlock, XBlock)
+                    blockSum = np.zeros(blockShape, dtype=np.float32)
 
-                for dataset in datasets:
-                    with gdalDatasets(dataset) as ds:
-                        band = ds.GetRasterBand(1)
-                        if not isinstance(band, gdal.Band):
-                            raise RecursionError("Faild to read band.")
-                        arr = band.ReadAsArray(0, YOffset, XSize, YBlock)
-                        if arr is None:
-                            raise RecursionError("Faild to read band as array.")
-                        
-                        # Use GPU
-                        if np.__name__ == "cupy":
-                            arrGpu = np.asarray(arr)
-                            arrGpu[arr == -99999] = 0  # Set nodata to 0 to avoid the disruption of sum
-                            blockSum += arrGpu
-                        else:
-                            arr[arr == -99999] = 0
-                            blockSum += arr
-                
-                if np.__name__ == "cupy":
-                    outBand.WriteArray(np.asnumpy(blockSum), 0, YOffset) # type: ignore
-                else:
-                    outBand.WriteArray(blockSum, 0, YOffset)
-                
-                # Release memory
-                outDs.FlushCache()
-                del blockSum
-                if np.__name__ == "cupy":
-                    np.get_default_memory_pool().free_all_blocks() # type: ignore
-                gc.collect()
+                    for dataset in datasets:
+                        with gdalDatasets(dataset) as ds:
+                            band = ds.GetRasterBand(1)
+                            if not isinstance(band, gdal.Band):
+                                raise RecursionError("Faild to read band.")
+                            arr = band.ReadAsArray(XOffset, YOffset, XBlock, YBlock)
+                            if arr is None:
+                                raise RecursionError("Faild to read band as array.")
+                            
+                            # Use GPU
+                            if np.__name__ == "cupy":
+                                arrGpu = np.asarray(arr)
+                                arrGpu[arr == -99999] = 0  # Set nodata to 0 to avoid the disruption of sum
+                                blockSum += arrGpu
+                            else:
+                                arr[arr == -99999] = 0
+                                blockSum += arr
+                    
+                    if np.__name__ == "cupy":
+                        outBand.WriteArray(np.asnumpy(blockSum), XOffset, YOffset) # type: ignore
+                    else:
+                        outBand.WriteArray(blockSum, XOffset, YOffset)
+                    
+                    # Release memory
+                    outDs.FlushCache()
+                    del blockSum
+                    if np.__name__ == "cupy":
+                        np.get_default_memory_pool().free_all_blocks() # type: ignore
+                    gc.collect()
         
             outDs.Destroy()
 
@@ -225,18 +235,17 @@ class populationMerge(floodingMerge):
 if __name__ == "__main__":
     # Adjust the multi-thread number based on your computer, too much threads will cause memory overflow
     # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=4096).mergeByAge("CHN", "test")
-    # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_All", multiThread=4)
+    populationMerge(r"C:\\0_PolyU\\population\\", blockSize=4096).mergeAll(r"C:\\0_PolyU\\population_All", multiThread=4)
     # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_Male", gender=['m'], multiThread=4)
     # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_Female", gender=['f'], multiThread=4)
     # age group: Dyussenbayev, A. (2017). Age periods of human life. Advances in Social Sciences Research Journal, 4(6).
-    ageGroup = {
-        "children": [x for x in range(0, 25, 5)] + [1],
-        "young": [x for x in range(25, 45, 5)],
-        "middle": [x for x in range(45, 60, 5)],
-        "elderly": [x for x in range(60, 81, 5)] # [x for x in range(60, 75, 5)]
-        # "senile&long_living": [x for x in range(75, 81, 5)]
-    }
-    for group in ["children", "young", "middle", "elderly"]:
-        populationMerge(r"C:\\0_PolyU\\population\\", blockSize=4096) \
-            .mergeAll("C:\\0_PolyU\\population_All_{}".format(group), mainAge=ageGroup[group], multiThread=4)
-    #NZL\KIR\RUS\FJI are too large for blocksize over 512 when using gpu on rtx5070
+    # ageGroup = {
+    #     "children": [x for x in range(0, 25, 5)] + [1],
+    #     "young": [x for x in range(25, 45, 5)],
+    #     "middle": [x for x in range(45, 60, 5)],
+    #     "elderly": [x for x in range(60, 81, 5)] # [x for x in range(60, 75, 5)]
+    #     # "senile&long_living": [x for x in range(75, 81, 5)]
+    # }
+    # for group in ["children", "young", "middle", "elderly"]:
+    #     populationMerge(r"C:\\0_PolyU\\population\\", blockSize=4096) \
+    #         .mergeAll("C:\\0_PolyU\\population_All_{}".format(group), mainAge=ageGroup[group], multiThread=4)

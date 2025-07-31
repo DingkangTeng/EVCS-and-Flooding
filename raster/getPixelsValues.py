@@ -71,6 +71,22 @@ class getPixelsValues:
             self.ref = rasterDs.GetSpatialRef()
 
         return
+    
+    def updateInfo(self, rasterInfo: tuple[str, str, tuple, str | osr.SpatialReference], layerInfo: tuple[str, str, str | osr.SpatialReference]) -> None:
+        self.rasterPath, self.projection, self.geotrans, ref = rasterInfo
+        self.layerPath, self.layerName, layerRef = layerInfo
+        if type(ref) is str:
+            self.ref = osr.SpatialReference()
+            self.ref.ImportFromWkt(ref)
+        else:
+            self.ref = ref
+        if type(layerRef) is str:
+            self.layerRef = osr.SpatialReference()
+            self.layerRef.ImportFromWkt(layerRef)
+        else:
+            self.layerRef = layerRef
+
+        return
 
 # Debugging and testing
 if __name__ == "__main__":
