@@ -21,7 +21,7 @@ class linkNodeWithPoints:
         conn.loadSpatialite() # Load spatialite extension
         cursor = conn.cursor(factory=modifyTable)
         # Add field
-        cursor.addFields("nodes", ("EVCSNum", "Integer", None), ("EVCSFids", "Text", None))
+        cursor.addFields("nodes", ("EVCSNum", "Integer", None, True), ("EVCSFids", "Text", None, False))
         cursor.execute(f"CREATE INDEX IF NOT EXISTS {FID_INDEX} ON nodes (fid)")
         # Add data
         df.to_sql("tempTable", conn, if_exists="replace", index=False)
@@ -120,6 +120,9 @@ class linkNodeWithPoints:
             nodeName = node.split('.')[0]
             # Get corresponding EVCS layer
             # Data have not collected, using nanjin as example
+            '''
+            !!!!
+            '''
             evcs = ("_GISAnalysis\\TestData\\test.gdb", "nanjin")
             future = excutor.submit(excute, (path, "nodes"), evcs, (stature, lock, bar))
             futures.append(future)

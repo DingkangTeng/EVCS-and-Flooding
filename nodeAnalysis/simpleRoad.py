@@ -1,12 +1,15 @@
-import os, sys, psutil
+import os, sys, psutil, gc
 import osmnx as ox
 import networkx as nx
 import pandas as pd
+import geopandas as gpd
+import numpy as np
 from iso3166 import countries_by_name
 from iso3166 import countries as COUNTRIES
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import Any
+from osmnx import utils
+from shapely.geometry import LineString, Point
 
 sys.path.append(".") # Set path to the roots
 
@@ -181,29 +184,63 @@ class getSimpleRoad:
         filePath: str,
         country: str,
         savePath: str,
-        truncateByEdge: bool = False,
-        customFilter: str | None = None,
+        customFilter: list | None = None,
         singleThread: bool = True
     ) -> None | list:
         
         if singleThread is None:
             print("Processing country: {}".format(country))
 
-        iso3 = countries_by_name[country].alpha3 if country in countries_by_name else country
-        
-        G = ox.graph_from_xml(
-            filePath,
-            retain_all=True
-        )
+        # gdfOrigional = gpd.read_file(filePath, layer="lines", engine="pyogrio", use_arrow=True)
+        gdfOrigional = gpd.read_file("_GISAnalysis\\TestData\\test.gdb", layer="rus", engine="pyogrio", use_arrow=True)
+        if customFilter is not None:
+            gdf = gdfOrigional[gdfOrigional["highway"].isin(customFilter)].copy()
+            del gdfOrigional
+            gc.collect()
+        else:
+            gdf = gdfOrigional
+        gdf.drop(columns=["waterway", "aerialway", "barrier", "man_made", "railway", "z_order"], inplace=True)
+        gdf["oneway"] = gdf["other_tags"].str.extract(r"\"oneway\"=>\"([^\"]*)\"")
+        gdf["oneway"] = np.where(gdf["oneway"] == "yes", True, False)
+        gdf["lanes"] = gdf["other_tags"].str.extract(r"\"lanes\"=>\"([^\"]*)\"")
 
-        G_proj = ox.project_graph(G, to_latlong=True)
+        if gdf.crs is not None:
+            espg = gdf.crs.to_epsg()
+        else:
+            espg = 4326
+        
+        gdf = gdf[100].copy()
+        
+        metadata = {
+            "created_date": utils.ts(),
+            "created_with": f"osm.pbf from geofabrik.de",
+            "crs": "epsg:{}".format(espg),
+        }
+        G = nx.MultiDiGraph(**metadata)
+        for idx, row in gdf.iterrows():
+            line: LineString = row["geometry"]
+            coords = list(line.coords)
+            edgeAttrs = row.drop("geometry").to_dict()
+            G.add_node(coords[0], x=coords[0][0], y=coords[0][1])
+            for i in range(1, len(coords)):
+                u = coords[i-1]
+                v = coords[i]
+                G.add_node(v, x=coords[i][0], y=coords[i][1])
+                G.add_edge(u, v, **edgeAttrs)
+                if not row["oneway"]:
+                    G.add_edge(v, u, **edgeAttrs)
+
+        if str(espg) != "4326":
+            G_proj = ox.project_graph(G, to_latlong=True)
+        else:
+            G_proj = G
         #Merge juncted intersections
         G2 = ox.consolidate_intersections(G_proj, rebuild_graph=True, tolerance=0.0001, dead_ends=True)
         G2 = nx.MultiDiGraph(G2, network_type="drive")
 
         ox.save_graph_geopackage(
             G2,
-            filepath=os.path.join(savePath, "{}.gpkg".format(iso3)),
+            filepath=os.path.join(savePath, "{}.gpkg".format(country)),
             directed=True,
             encoding="utf-8"
         )
@@ -216,14 +253,20 @@ if __name__ == "__main__":
         ^trunk_link$|^primary_link$|^secondary_link$|^tertiary_link$\"] \
     "
     # getSimpleRoad().getAllCountriesNetworksGraph("C:\\0_PolyU\\roadsGraph", customFilter=customFilter, multiThread=1) # type: ignore
-    getSimpleRoad().getOneCountry("FRANCE", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
+    # getSimpleRoad().getOneCountry("FRANCE", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
+    customFilter = [
+        "^motorway", "trunk", "primary", "secondary", "tertiary", "motorway_link",
+        "trunk_link", "primary_link", "secondary_link", "tertiary_link"
+    ]
+    getSimpleRoad().getOneCountryFromFile("C:\\russia-latest.osm.pbf", "RUS2", "test", customFilter=customFilter)
 
     # Un-download:
     # 分别读取有边界点不重合的问题
     # {'CANADA',
     #  'FRANCE',
-    #  'JAPAN',
     #  'CHINA',
     #  'NORWAY',
     #  'RUSSIAN FEDERATION',
     #  'UNITED STATES OF AMERICA'}
+
+    # Results have problem with road lenght, run calculateRoadLength after

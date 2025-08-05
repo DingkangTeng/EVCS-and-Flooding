@@ -26,7 +26,7 @@ class linkNodeWithSumOfRaster:
         conn.loadSpatialite() # Load spatialite extension
         cursor = conn.cursor(factory=modifyTable)
         # Add field
-        cursor.addFields("nodes", (fieldName, "Real", 0))
+        cursor.addFields("nodes", (fieldName, "Real", 0, True))
         cursor.execute(f"CREATE INDEX IF NOT EXISTS {FID_INDEX} ON nodes (fid)")
         # Add data
         df.to_sql("tempTable", conn, if_exists="replace", index=False)
@@ -215,12 +215,10 @@ class linkNodeWithSumOfRaster:
         return
 
 if __name__ == "__main__":
-    # linkNodeWithSumOfRaster(10240).processOneLayer(
-    #     ("test//OSM_Nanjin_ThirdRoad.gpkg", "nodes"),
-    #     {"test//Flooding_Nanjin2.tif": "allPopulation"},
-    #     os.cpu_count()  # type: ignore
-    # )
+    linkNodeWithSumOfRaster(10240).processOneLayer(
+        ("test//CHN.gpkg", "nodes"),
+        {"test//pop_Nanjing.tif": "allPopulation"},
+        os.cpu_count()  # type: ignore
+    )
 
-    linkNodeWithSumOfRaster().processAll(r"C:\\0_PolyU\\roadsGraph", r"C:\\0_PolyU", os.cpu_count()) # type: ignore
-
-    # 10240*10240: 23G consume
+    # linkNodeWithSumOfRaster().processAll(r"C:\\0_PolyU\\roadsGraph", r"C:\\0_PolyU", os.cpu_count()) # type: ignore

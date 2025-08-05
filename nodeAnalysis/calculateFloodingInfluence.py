@@ -46,7 +46,7 @@ class calculateFloodingInfluence:
             # Add field
             conn = sqlite3.connect(path)
             cursor = conn.cursor(factory=modifyTable)
-            cursor.addFields("edges", (fieldName, "Integer", None)) # Add fields if not exists
+            cursor.addFields("edges", (fieldName, "Integer", None, True)) # Add fields if not exists
             cursor.execute(f"CREATE INDEX IF NOT EXISTS {FID_INDEX} ON edges (fid)")
             conn.commit()
             conn.close()
@@ -64,6 +64,8 @@ class calculateFloodingInfluence:
                 gc.collect()
                 return True
             bar = tqdm(total=gdf.shape[0], desc="Processing country {}".format(gpkg.split('.')[0]), unit="road")
+
+            # 能不能按栅格非0的部分初筛一下，把未在栅格区间的直接赋值0？
 
             # Segment saving
             indexsArray = np.array_split(gdf.index, max(1, gdf.shape[0] // 10000)) # Save every 10000 times
@@ -147,11 +149,10 @@ class calculateFloodingInfluence:
         # for gpkg in gpkgs:
         futures = []
         debugDict = {}
-        thread = int(multiThread)
         # IO work, using thread
-        with ThreadPoolExecutor(max_workers=thread) as excutor:
+        with ThreadPoolExecutor(max_workers=multiThread) as excutor:
             for gpkg in gpkgs:
-                future = excutor.submit(self.calOneGpkg, roadPath, gpkg, fieldName, thread)
+                future = excutor.submit(self.calOneGpkg, roadPath, gpkg, fieldName, multiThread)
                 debugDict[future] = gpkg
                 futures.append(future)
             
@@ -167,16 +168,16 @@ class calculateFloodingInfluence:
         return
 
 if __name__ == "__main__":
-    # calculateFloodingInfluence("C:\\0_PolyU\\flooding\\SumDays.tif").calculateAll(
-    #     "test",
-    #     "affectDays",
-    #     specificeFile=["OSM_Nanjin_ThirdRoad.gpkg"],
-    #     multiThread=os.cpu_count() # type:ignore
-    # )
-
     calculateFloodingInfluence("C:\\0_PolyU\\flooding\\SumDays.tif").calculateAll(
-        "C:\\0_PolyU\\roadsGraph",
+        "test",
         "affectDays",
-        # specificeFile=["GNB.gpkg"],
+        specificeFile=["CHN.gpkg"],
         multiThread=os.cpu_count() # type:ignore
     )
+
+    # calculateFloodingInfluence("C:\\0_PolyU\\flooding\\SumDays.tif").calculateAll(
+    #     "C:\\0_PolyU\\roadsGraph",
+    #     "affectDays",
+    #     specificeFile=["JPN - 副本.gpkg"],
+    #     multiThread=int(os.cpu_count() ** 0.5) + 1 # type:ignore
+    # )

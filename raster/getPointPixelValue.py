@@ -17,7 +17,7 @@ class getPointPixelsValue(getPixelsValues):
 
         return
     
-    def getOneLayerValue(self, layer: str | tuple[str, str], multiLayerLock: bool = False) -> ...:
+    def getOneLayerValue(self, layer: str | tuple[str, str]) -> ...:
         # Check Initialize
         if self.rasterPath is None:
             raise RuntimeError("Have not initialized raster data, use updateRasterInfo().")
@@ -42,14 +42,12 @@ class getPointPixelsValue(getPixelsValues):
             XCoords, YCoords = transformer.transform(XCoords, YCoords)
 
         # Get raster data withing the layer extent
-        if multiLayerLock:
-            pass
-        else:
-            with rio.open(self.rasterPath) as src:
-                coords = np.array(list(zip(XCoords, YCoords)))
-                values = np.array([val[0] for val in src.sample(coords)])
-                return pd.DataFrame({"fid": fid, "values": values})
+        with rio.open(self.rasterPath) as src:
+            coords = np.array(list(zip(XCoords, YCoords)))
+            values = np.array([val[0] for val in src.sample(coords)])
+            return pd.DataFrame({"fid": fid, "values": values})
 
 # Debug
 if __name__ == "__main__":
-    getPointPixelsValue("C:\\0_PolyU\\flooding\\SumDays.tif").getOneLayerValue(("_GISAnalysis\\TestData\\test.gdb", "nanjin"))
+    a = getPointPixelsValue("C:\\0_PolyU\\flooding\\SumDays.tif").getOneLayerValue(("_GISAnalysis\\TestData\\test.gdb", "nanjin"))
+    a.to_csv("test\\CHN_EVCS_FLooding.csv", encoding="utf-8", index=False)
