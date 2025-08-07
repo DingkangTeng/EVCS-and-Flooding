@@ -1,6 +1,9 @@
 import sys, gc, os
-import numpy as np
+import rasterio as rio
+import geopandas as gpd
 from osgeo import gdal, ogr, osr
+from rasterio.features import shapes
+from shapely.geometry import MultiPolygon, shape
 
 sys.path.append(".") # Set path to the roots
 
@@ -96,53 +99,24 @@ class getPixelsValues:
     
     def convertNoZeroRasterToVector(self) -> None:
         if self.rasterPath is None:
-            raise RuntimeError("Uninitialize raster, run updateRasterInfo() or updateInfo().")
-        with self.gdalDatasets(self.rasterPath) as ds:
-            band = ds.GetRasterBand(1)
-            if not isinstance(band, gdal.Band):
-                raise RuntimeError("Falied to read raster band.")
-            band.SetNoDataValue(0)
-            vectorDs = False
-            outputDs = False
+            raise RuntimeError("Raseter not initialized, run updateRasterInfo() or updateInfo().")
+        with rio.open(self.rasterPath) as src:
+            data = src.read(1)
+            transform = src.transform
+            crs = src.crs
+            mask = (data != 0)
 
-            # Creat vector
-            driver = ogr.GetDriverByName("MEM")
-            if not isinstance(driver, gdal.Driver):
-                raise RuntimeError("Failed to creat memory driver.")
-            vectorDs = driver.CreateDataSource("MEM")
-            if not isinstance(vectorDs, gdal.Dataset):
-                raise RuntimeError("Failed to creat vector data.")
-            vectorLayer = vectorDs.CreateLayer("polygons", geom_type=ogr.wkbPolygon)
-            if not isinstance(vectorLayer, ogr.Layer):
-                raise RuntimeError("Failed to creat vector layer.")
-            field = ogr.FieldDefn("value", ogr.OFTInteger)
-            vectorLayer.CreateField(field)
-            
-            gdal.Polygonize(band, None, vectorLayer, 0, [], callback=None)
+            polygons = []
+            for geom, val in shapes(data, mask=mask, transform=transform, connectivity=8):
+                polygons.append(shape(geom))
 
-            # Save data
-            outputDriver = ogr.GetDriverByName('ESRI Shapefile')
-            if not isinstance(outputDriver, gdal.Driver):
-                raise RuntimeError("Failed to creat output driver.")
-            outputDs = outputDriver.CreateDataSource(
-                os.path.join(
-                    os.path.dirname(self.rasterPath),
-                    "{}.shp".format(os.path.basename(self.rasterPath).split('.')[0])
-                )
-            )
-            if not isinstance(outputDs, gdal.Dataset):
-                raise RuntimeError("Failed to creat output layer.")
-            outputDs.CopyLayer(vectorLayer, "polygons")
+            if polygons:
+                combined_geom = MultiPolygon(polygons)
+            else:
+                combined_geom = MultiPolygon()
 
-            # Save vector
-            if vectorDs:
-                vectorDs.FlushCache()
-                vectorDs.Close()
-                driver = None
-            if outputDs:
-                outputDs.FlushCache()
-                outputDs.Close()
-                outputDriver = None
+            gdf = gpd.GeoDataFrame(geometry=[combined_geom], crs=crs.to_epsg())
+            gdf.to_file(os.path.join(os.path.dirname(self.rasterPath), "{}.shp".format(os.path.basename(self.rasterPath).split('.')[0])), encoding="utf-8")  
 
         return
 

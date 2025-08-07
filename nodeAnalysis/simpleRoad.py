@@ -1,4 +1,4 @@
-import os, sys, psutil, gc
+import os, sys, psutil, gc, copy
 import osmnx as ox
 import networkx as nx
 import pandas as pd
@@ -9,7 +9,9 @@ from iso3166 import countries as COUNTRIES
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from osmnx import utils
-from shapely.geometry import LineString, Point
+from shapely.geometry import MultiLineString, LineString, Point, MultiPoint
+from shapely.strtree import STRtree
+from shapely.ops import split
 
 sys.path.append(".") # Set path to the roots
 
@@ -33,6 +35,8 @@ class getSimpleRoad:
                 self.__maxThread
                 )
         )
+
+        return
 
     def getAllCountriesNetworksGraph(
         self,
@@ -177,22 +181,40 @@ class getSimpleRoad:
             encoding="utf-8"
         )
 
-        return None
+        return
     
     @staticmethod
     def getOneCountryFromFile(
         filePath: str,
         country: str,
         savePath: str,
-        customFilter: list | None = None,
-        singleThread: bool = True
+        customFilter: list | None = None
     ) -> None | list:
         
-        if singleThread is None:
-            print("Processing country: {}".format(country))
+        def processLine(line: LineString, attributes: dict, nodes: dict, nodeIDs: list[int]) ->list[tuple[int, int, dict]]:
+            segments = []
+            coords = list(line.coords)
+            attributes["geometry"] = line
 
-        # gdfOrigional = gpd.read_file(filePath, layer="lines", engine="pyogrio", use_arrow=True)
-        gdfOrigional = gpd.read_file("_GISAnalysis\\TestData\\test.gdb", layer="rus", engine="pyogrio", use_arrow=True)
+            for coordxy in [coords[0], coords[-1]]:
+                coord = Point(coordxy[0], coordxy[1])
+                if coord not in nodes:
+                    nodes[coord] = nodeIDs[0]
+                    nodeIDs[0] += 1
+            u = nodes[Point(coords[0])]
+            v = nodes[Point(coords[-1])]
+            segments.append((u, v, attributes))
+            if not attributes["oneway"]:
+                verseAttr = copy.deepcopy(attributes)
+                verseAttr["geometry"] = LineString(coords[::-1]) # Reverse line
+                segments.append((v, u, verseAttr))
+
+            return segments
+        
+        tqdm.write("Processing country: {} \nExtracting data from file...".format(country))
+
+        gdfOrigional = gpd.read_file(filePath, layer="lines", engine="pyogrio", use_arrow=True)
+        # gdfOrigional = gpd.read_file("_GISAnalysis\\TestData\\test.gdb", layer="rus", use_arrow=True, rows=1000)
         if customFilter is not None:
             gdf = gdfOrigional[gdfOrigional["highway"].isin(customFilter)].copy()
             del gdfOrigional
@@ -204,48 +226,104 @@ class getSimpleRoad:
         gdf["oneway"] = np.where(gdf["oneway"] == "yes", True, False)
         gdf["lanes"] = gdf["other_tags"].str.extract(r"\"lanes\"=>\"([^\"]*)\"")
 
+        bar = tqdm(total=gdf.shape[0] + 410, desc=country)
         if gdf.crs is not None:
             espg = gdf.crs.to_epsg()
         else:
             espg = 4326
-        
-        gdf = gdf[100].copy()
         
         metadata = {
             "created_date": utils.ts(),
             "created_with": f"osm.pbf from geofabrik.de",
             "crs": "epsg:{}".format(espg),
         }
-        G = nx.MultiDiGraph(**metadata)
+
+        bar.set_description("Building origional Graph for {}".format(country))
+        nodes: dict[Point, int] = {}
+        edges = []
+        nodeIDs: list[int] = [0]
+
         for idx, row in gdf.iterrows():
-            line: LineString = row["geometry"]
-            coords = list(line.coords)
-            edgeAttrs = row.drop("geometry").to_dict()
-            G.add_node(coords[0], x=coords[0][0], y=coords[0][1])
-            for i in range(1, len(coords)):
-                u = coords[i-1]
-                v = coords[i]
-                G.add_node(v, x=coords[i][0], y=coords[i][1])
-                G.add_edge(u, v, **edgeAttrs)
-                if not row["oneway"]:
-                    G.add_edge(v, u, **edgeAttrs)
+            lines = row["geometry"]
+            attrs = row.drop("geometry").to_dict()
+            if isinstance(lines, MultiLineString):
+                for line in lines.geoms:
+                    edges.extend(processLine(line, attrs, nodes, nodeIDs))
+            else:
+                edges.extend(processLine(lines, attrs, nodes, nodeIDs))
+            bar.update(1)
+
+        # Check middle point and split edges
+        bar.set_description("Check the middle point")
+        points = list(nodes.keys())
+        tree = STRtree(points)
+
+        newEdges = []
+        for u, v, attr in edges:
+            linestring: LineString = attr["geometry"]
+            # Using STRtree find nearby points
+            candidates = tree.query(linestring.buffer(1e-8))
+            candidates = [points[i] for i in candidates]
+            midNodes = []
+            for pt in candidates:
+                nodeId = nodes[pt]
+                if nodeId in (u, v):
+                    continue
+                if linestring.distance(pt) < 1e-8:
+                    proj = linestring.project(pt) # The distance of the curve from the starting point of linestring to the projection point
+                    if 0 < proj < linestring.length:
+                        midNodes.append((proj, nodeId, pt))
+            if midNodes != []:
+                midNodes.sort()
+                cutPoints = MultiPoint([node[2] for node in midNodes])
+                nodeIds = [u] + [node[1] for node in midNodes] + [v]
+                segments = split(linestring, cutPoints).geoms
+                for i in range(len(segments)):
+                    newAttr = copy.deepcopy(attr)
+                    newAttr["geometry"] = segments[i]
+                    newEdges.append((nodeIds[i], nodeIds[i+1], newAttr))
+            else:
+                newEdges.append((u, v, attr))
+        del edges
+        gc.collect()
+        bar.update(100)
+
+        bar.set_description("Building graph...")
+        G = nx.MultiDiGraph(**metadata)
+        for coord, node_id in nodes.items():
+            G.add_node(node_id, x=coord.x, y=coord.y)
+        for u, v, attrs in newEdges:
+            G.add_edge(u, v, **attrs)
+        bar.update(100)
+        del nodes, newEdges, nodeIDs
+        gc.collect()
 
         if str(espg) != "4326":
-            G_proj = ox.project_graph(G, to_latlong=True)
+            bar.set_description("Projecting {}".format(country))
+            GProj = ox.project_graph(G, to_latlong=True)
+            bar.update(10)
         else:
-            G_proj = G
-        #Merge juncted intersections
-        G2 = ox.consolidate_intersections(G_proj, rebuild_graph=True, tolerance=0.0001, dead_ends=True)
-        G2 = nx.MultiDiGraph(G2, network_type="drive")
+            GProj = G
+            bar.update(10)
 
+        #Merge juncted intersections
+        bar.set_description("Merging juncted intersections of {}".format(country))
+        G2 = ox.consolidate_intersections(GProj, rebuild_graph=True, tolerance=0.0001, dead_ends=True)
+        G2 = nx.MultiDiGraph(G2, network_type="drive")
+        bar.update(100)
+
+        bar.set_description("Saving result of {}".format(country))
         ox.save_graph_geopackage(
             G2,
             filepath=os.path.join(savePath, "{}.gpkg".format(country)),
             directed=True,
             encoding="utf-8"
         )
+        bar.update(100)
 
-        return None
+        bar.close()
+
+        return
     
 if __name__ == "__main__":
     customFilter = " \
@@ -253,20 +331,19 @@ if __name__ == "__main__":
         ^trunk_link$|^primary_link$|^secondary_link$|^tertiary_link$\"] \
     "
     # getSimpleRoad().getAllCountriesNetworksGraph("C:\\0_PolyU\\roadsGraph", customFilter=customFilter, multiThread=1) # type: ignore
-    # getSimpleRoad().getOneCountry("FRANCE", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
+    # getSimpleRoad().getOneCountry("Honolulu", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
     customFilter = [
-        "^motorway", "trunk", "primary", "secondary", "tertiary", "motorway_link",
+        "motorway", "trunk", "primary", "secondary", "tertiary", "motorway_link",
         "trunk_link", "primary_link", "secondary_link", "tertiary_link"
     ]
-    getSimpleRoad().getOneCountryFromFile("C:\\russia-latest.osm.pbf", "RUS2", "test", customFilter=customFilter)
+    getSimpleRoad().getOneCountryFromFile("C:\\0_PolyU\\russia-latest.osm.pbf", "RUS2", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
 
     # Un-download:
     # 分别读取有边界点不重合的问题
-    # {'CANADA',
-    #  'FRANCE',
-    #  'CHINA',
-    #  'NORWAY',
-    #  'RUSSIAN FEDERATION',
+    # {'CANADA',d
+    #  'FRANCE',d
+    #  'CHINA',d
+    #  'NORWAY',d
     #  'UNITED STATES OF AMERICA'}
 
     # Results have problem with road lenght, run calculateRoadLength after
