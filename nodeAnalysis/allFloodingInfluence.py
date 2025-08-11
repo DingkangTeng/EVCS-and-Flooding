@@ -13,7 +13,7 @@ from function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
 from raster.getMaxPixelsValues import getMaxPixelsValues
 
 # Already use window in getMaxPixelsValues, do not need extra memory management when executing
-class calculateFloodingInfluence:
+class allFloodingInfluence:
     __slots__ = ["initial", "rasterInfo"]
 
     def __init__(self, floodingPath: str) -> None:
@@ -139,8 +139,7 @@ class calculateFloodingInfluence:
             gpkgs = set(specificeFile)
         # Update log
         log = os.path.join(roadPath, "log.json")
-        stature = loadJsonRecord.load(log, "Flooding_Road")
-        assert type(stature) is list
+        stature = loadJsonRecord(log, "Flooding_Road")
         if len(stature) != 0:
             for i in stature:
                 gpkgs.discard(i)
@@ -161,14 +160,15 @@ class calculateFloodingInfluence:
                 try:
                     if future.result():
                         stature.append(gpkg)
-                        loadJsonRecord.save(log, "Flooding_Road", stature)
                 except Exception as e:
                     tqdm.write("Failed to process {}: {}".format(gpkg, e))
 
+        stature.save()
+        
         return
 
 if __name__ == "__main__":
-    calculateFloodingInfluence("C:\\0_PolyU\\flooding\\SumDays.tif").calculateAll(
+    allFloodingInfluence("C:\\0_PolyU\\flooding\\SumDays.tif").calculateAll(
         "test",
         "affectDays",
         specificeFile=["CHN.gpkg"],

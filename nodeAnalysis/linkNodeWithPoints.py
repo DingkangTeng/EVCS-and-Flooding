@@ -1,4 +1,4 @@
-import sys, sqlite3, os, threading
+import sys, sqlite3, os
 import pandas as pd
 import geopandas as gpd
 import numpy as np
@@ -90,22 +90,10 @@ class linkNodeWithPoints:
         return
     
     def processAllLayers(self, pathNode: str, MultiThread: int = 1) -> None:
-        def excute(layerNode: tuple[str, str], layerPoint: str | tuple[str, str], stature: tuple[list, threading.Lock, tqdm]) -> None:
-            l, lock, bar = stature
-            try:
-                self.processOneLayer(layerNode, layerPoint)
-            except Exception as e:
-                raise RuntimeError(e)
-            else:
-                with lock:
-                    bar.update(1)
-                    l.append(os.path.basename(layerNode[0]))
-
         allNodes = set(readFiles(pathNode).specificFile(suffix=["gpkg"]))
         # Update log
         log = os.path.join(pathNode, "log.json")
-        stature = loadJsonRecord.load(log, "EVCS")
-        assert type(stature) is list
+        stature = loadJsonRecord(log, "EVCS")
         if len(stature) != 0:
             for i in stature:
                 allNodes.discard(i)
@@ -114,30 +102,31 @@ class linkNodeWithPoints:
         futures = []
         debugDict = {}
         excutor = ThreadPoolExecutor(max_workers=MultiThread)
-        lock = threading.Lock()
         for node in allNodes:
             path = os.path.join(pathNode, node)
-            nodeName = node.split('.')[0]
             # Get corresponding EVCS layer
             # Data have not collected, using nanjin as example
             '''
             !!!!
             '''
             evcs = ("_GISAnalysis\\TestData\\test.gdb", "nanjin")
-            future = excutor.submit(excute, (path, "nodes"), evcs, (stature, lock, bar))
+            future = excutor.submit(self.processOneLayer, (path, "nodes"), evcs)
             futures.append(future)
-            debugDict[future] = nodeName
+            debugDict[future] = node
         
         for future in as_completed(futures):
-            nodeName = debugDict[future]
+            node = debugDict[future]
             try:
                 future.result()
             except Exception as e:
-                tqdm.write("Error in processing {}: {}".format(nodeName, e))
+                tqdm.write("Error in processing {}: {}".format(node, e))
+            else:
+                bar.update(1)
+                stature.append(os.path.basename(node))
 
         bar.close()
         # Only successed sub-thread will append processed data into log list
-        loadJsonRecord.save(log, "EVCS", stature)
+        stature.save()
 
         return
 

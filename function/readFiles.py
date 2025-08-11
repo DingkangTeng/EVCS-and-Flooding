@@ -1,4 +1,5 @@
 import sys, os, json
+from typing import Iterator
 
 sys.path.append(".") # Set path to the roots
 
@@ -47,35 +48,70 @@ class readFiles:
 
 # Creat processed json record
 class loadJsonRecord:
-    @classmethod
-    def load(cls, path: str, name: str, structure: list | dict = []) -> list | dict:
+    __slots__ = ["path", "name", "result"]
+
+    def __init__(self, path: str, name: str, structure: list[str] | dict[str, list[str]] = []):
+        self.path = path
+        self.name = name
+        self.result = structure
         if os.path.exists(path):
             with open(path, 'r') as f:
                 j = json.load(f)
                 if name in j.keys():
-                    return j[name]
+                    self.result = j[name]
+                    return
                 else:
                     j[name] = structure
                     with open(path, 'w') as f:
                         json.dump(j, f, indent=4)
-                    return structure
+                    return
         else:
             with open(path, 'w') as f:
                 json.dump({name: structure}, f, indent=4)
-                return structure
-            
-    @classmethod
-    def save(cls, path: str, name: str, result: list | dict) -> None:
-        if os.path.exists(path):
-            with open(path, 'r') as f:
+                return
+    
+    def __iter__(self) -> Iterator:
+        return iter(self.result)
+    
+    def __len__(self) -> int:
+        return len(self.result)
+    
+    def __str__(self) -> str:
+        return str(self.result)
+    
+    def get(self, key: str, default: list = []) -> list[str]:
+        if isinstance(self.result, list):
+            return self.result
+        else:
+            value = self.result.get(key, default)
+            if isinstance(value, list):
+                return value
+            elif isinstance(value, str):
+                return [value]
+            elif value is None:
+                return default
+            else:
+                return list(value)
+    
+    # add update data
+    def append(self, item: str | dict[str, list]) -> None:
+        if isinstance(self.result, list) and isinstance(item, str):
+            self.result.append(item)
+        elif isinstance(self.result, dict) and isinstance(item, dict):
+            key, result= next(iter(item.items()))
+            self.result[key] = result
+
+    def save(self) -> None:
+        if os.path.exists(self.path):
+            with open(self.path, 'r') as f:
                 j = json.load(f)
-                j[name] = result
-                with open(path, 'w') as f:
+                j[self.name] = self.result
+                with open(self.path, 'w') as f:
                     json.dump(j, f, indent=4)
                 return
         else:
-            with open(path, 'w') as f:
-                json.dump({name: result}, f, indent=4)
+            with open(self.path, 'w') as f:
+                json.dump({self.name: self.result}, f, indent=4)
                 return
 
 # Debug

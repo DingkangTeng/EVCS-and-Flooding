@@ -67,11 +67,7 @@ class getSimpleRoad:
             multiThread = self.__maxThread
 
         if countries == set():
-            allCountries = set(countries_by_name.keys()) # All upper
-            # Exclude the countries that are already exist in the save path
-            existingFiles = readFiles(savePath).specificFile(suffix=["gpkg"])
-            existingCountries = set([COUNTRIES.get(f.split(".")[0]).name.upper() for f in existingFiles])
-            allCountries = allCountries - existingCountries
+            allCountries = self.checkCountry(savePath)
         else:
             allCountries = set(countries)
         mkdir(savePath)  # Create the save path if not exists
@@ -139,7 +135,7 @@ class getSimpleRoad:
                 return exceptionCountry
             elif country in [
                 "HOLY SEE", "PITCAIRN", "COCOS (KEELING) ISLANDS", "SOUTH GEORGIA AND THE SOUTH SANDWICH ISLANDS",
-                "HEARD ISLAND AND MCDONALD ISLANDS", "TOKELAU"
+                "HEARD ISLAND AND MCDONALD ISLANDS", "TOKELAU", "BOUVET ISLAND"
             ]: # No data country
                 return
             try:
@@ -183,8 +179,8 @@ class getSimpleRoad:
 
         return
     
-    @staticmethod
     def getOneCountryFromFile(
+        self,
         filePath: str,
         country: str,
         savePath: str,
@@ -221,6 +217,11 @@ class getSimpleRoad:
             gc.collect()
         else:
             gdf = gdfOrigional
+        
+        if gdf.shape[0] == 0:
+            tqdm.write("No data.")
+            return
+        
         gdf.drop(columns=["waterway", "aerialway", "barrier", "man_made", "railway", "z_order"], inplace=True)
         gdf["oneway"] = gdf["other_tags"].str.extract(r"\"oneway\"=>\"([^\"]*)\"")
         gdf["oneway"] = np.where(gdf["oneway"] == "yes", True, False)
@@ -258,36 +259,13 @@ class getSimpleRoad:
         points = list(nodes.keys())
         tree = STRtree(points)
 
-        newEdges = []
-        for u, v, attr in edges:
-            linestring: LineString = attr["geometry"]
-            # Using STRtree find nearby points
-            candidates = tree.query(linestring.buffer(1e-8))
-            candidates = [points[i] for i in candidates]
-            midNodes = []
-            for pt in candidates:
-                nodeId = nodes[pt]
-                if nodeId in (u, v):
-                    continue
-                if linestring.distance(pt) < 1e-8:
-                    proj = linestring.project(pt) # The distance of the curve from the starting point of linestring to the projection point
-                    if 0 < proj < linestring.length:
-                        midNodes.append((proj, nodeId, pt))
-            if midNodes != []:
-                midNodes.sort()
-                cutPoints = MultiPoint([node[2] for node in midNodes])
-                nodeIds = [u] + [node[1] for node in midNodes] + [v]
-                segments = split(linestring, cutPoints).geoms
-                for i in range(len(segments)):
-                    newAttr = copy.deepcopy(attr)
-                    newAttr["geometry"] = segments[i]
-                    newEdges.append((nodeIds[i], nodeIds[i+1], newAttr))
-            else:
-                newEdges.append((u, v, attr))
-        del edges
+        newEdges = self.splitEdges(edges, points, tree, nodes) # Split for multi processing later
+        bar.update(1)
+        del edges, points, tree
         gc.collect()
         bar.update(100)
 
+        # Transform nodes to graph
         bar.set_description("Building graph...")
         G = nx.MultiDiGraph(**metadata)
         for coord, node_id in nodes.items():
@@ -325,25 +303,65 @@ class getSimpleRoad:
 
         return
     
+    @staticmethod
+    def checkCountry(path: str) -> list:
+        allCountries = set(countries_by_name.keys()) # All upper
+        # Exclude the countries that are already exist in the save path
+        existingFiles = readFiles(path).specificFile(suffix=["gpkg"])
+        existingCountries = set([COUNTRIES.get(f.split(".")[0]).name.upper() for f in existingFiles])
+        result = list(allCountries - existingCountries)
+        result.sort()
+        
+        return result
+
+    @staticmethod
+    def splitEdges(edges: list[tuple[int, int, dict]], points: list[Point], tree: STRtree, nodes: dict[Point, int]) -> list[tuple[int, int, dict]]:
+        newEdges = []
+        for u, v, attr in edges:
+            linestring: LineString = attr["geometry"]
+            # Using STRtree find nearby points
+            candidates = tree.query(linestring.buffer(1e-8))
+            candidates = [points[i] for i in candidates]
+            midNodes = []
+            for pt in candidates:
+                nodeId = nodes[pt]
+                if nodeId in (u, v):
+                    continue
+                if linestring.distance(pt) < 1e-8:
+                    proj = linestring.project(pt) # The distance of the curve from the starting point of linestring to the projection point
+                    if 0 < proj < linestring.length:
+                        midNodes.append((proj, nodeId, pt))
+            if midNodes != []:
+                midNodes.sort()
+                cutPoints = MultiPoint([node[2] for node in midNodes])
+                nodeIds = [u] + [node[1] for node in midNodes] + [v]
+                segments = split(linestring, cutPoints).geoms
+                for i in range(len(segments)):
+                    newAttr = copy.deepcopy(attr)
+                    newAttr["geometry"] = segments[i]
+                    newEdges.append((nodeIds[i], nodeIds[i+1], newAttr))
+            else:
+                newEdges.append((u, v, attr))
+            
+        return newEdges
+    
 if __name__ == "__main__":
     customFilter = " \
         [\"highway\"~\"^motorway$|^trunk$|^primary$|^secondary$|^tertiary$|^motorway_link$| \
         ^trunk_link$|^primary_link$|^secondary_link$|^tertiary_link$\"] \
     "
     # getSimpleRoad().getAllCountriesNetworksGraph("C:\\0_PolyU\\roadsGraph", customFilter=customFilter, multiThread=1) # type: ignore
-    # getSimpleRoad().getOneCountry("Honolulu", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
+    # getSimpleRoad().getOneCountry("CHINA", "test2", customFilter=customFilter)
     customFilter = [
         "motorway", "trunk", "primary", "secondary", "tertiary", "motorway_link",
         "trunk_link", "primary_link", "secondary_link", "tertiary_link"
     ]
-    getSimpleRoad().getOneCountryFromFile("C:\\0_PolyU\\russia-latest.osm.pbf", "RUS2", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
+    getSimpleRoad().getOneCountryFromFile("C:\\0_PolyU\\china-latest.osm.pbf", "CHN3", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
+    print(getSimpleRoad.checkCountry("C:\\0_PolyU\\roadsGraph"))
 
     # Un-download:
-    # 分别读取有边界点不重合的问题
-    # {'CANADA',d
-    #  'FRANCE',d
-    #  'CHINA',d
-    #  'NORWAY',d
+    # {'FRANCE',d
     #  'UNITED STATES OF AMERICA'}
+    # 中国下载的数据有问题，可能要原生数据
 
     # Results have problem with road lenght, run calculateRoadLength after

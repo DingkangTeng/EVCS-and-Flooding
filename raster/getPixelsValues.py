@@ -97,29 +97,30 @@ class getPixelsValues:
 
         return
     
-    def convertNoZeroRasterToVector(self) -> None:
-        if self.rasterPath is None:
-            raise RuntimeError("Raseter not initialized, run updateRasterInfo() or updateInfo().")
-        with rio.open(self.rasterPath) as src:
-            data = src.read(1)
-            transform = src.transform
-            crs = src.crs
-            mask = (data != 0)
+    # def convertNoZeroRasterToVector(self) -> None:
+    #     if self.rasterPath is None:
+    #         raise RuntimeError("Raseter not initialized, run updateRasterInfo() or updateInfo().")
+    #     with rio.open(self.rasterPath) as src:
+    #         data = src.read(1)
+    #         transform = src.transform
+    #         crs = src.crs
+    #         mask = (data != 0)
 
-            polygons = []
-            for geom, val in shapes(data, mask=mask, transform=transform, connectivity=8):
-                polygons.append(shape(geom))
+    #         polygons = []
+    #         for geom, val in shapes(data, mask=mask, transform=transform, connectivity=8):
+    #             polygons.append(shape(geom))
 
-            if polygons:
-                combined_geom = MultiPolygon(polygons)
-            else:
-                combined_geom = MultiPolygon()
+    #         if polygons:
+    #             combined_geom = MultiPolygon(polygons)
+    #         else:
+    #             combined_geom = MultiPolygon()
 
-            gdf = gpd.GeoDataFrame(geometry=[combined_geom], crs=crs.to_epsg())
-            gdf.to_file(os.path.join(os.path.dirname(self.rasterPath), "{}.shp".format(os.path.basename(self.rasterPath).split('.')[0])), encoding="utf-8")  
+    #         gdf = gpd.GeoDataFrame(geometry=[combined_geom], crs=crs.to_epsg())
+    #         gdf.to_file(os.path.join(os.path.dirname(self.rasterPath), "{}.shp".format(os.path.basename(self.rasterPath).split('.')[0])), encoding="utf-8")  
 
-        return
+    #     return
 
 # Debugging and testing
 if __name__ == "__main__":
-    a = getPixelsValues("C:\\0_PolyU\\flooding\\SumDays.tif").convertNoZeroRasterToVector()
+    # a = getPixelsValues("C:\\0_PolyU\\flooding\\SumDays.tif").convertNoZeroRasterToVector()
+    pass

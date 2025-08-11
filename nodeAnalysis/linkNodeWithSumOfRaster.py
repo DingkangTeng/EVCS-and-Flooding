@@ -117,27 +117,22 @@ class linkNodeWithSumOfRaster:
         
         return results
     
-    def processOneLayer(self, layerNode: tuple[str, str], rastersDict: dict[str, str], maxThread: int = 1) -> None:
+    def processOneLayer(self, layerNode: tuple[str, str], rastersDict: dict[str, str], processedRaster: list, maxThread: int = 1) -> tuple[str, list]:
         # Read node layer
-        path = layerNode[0]  # For updates data into gpkg
-        logPath = os.path.dirname(path)
+        path, layer = layerNode
         nodeName = os.path.basename(path)
-        # Update log
-        log = os.path.join(logPath, "log.json")
-        stature = loadJsonRecord.load(log, "populationRaster", {})
-        assert type(stature) is dict
-        processedRaster = stature.get(nodeName, [])
+        
         rasterSet = set(rastersDict.keys())
         if len(processedRaster) != 0:
             for i in processedRaster:
                 rasterSet.discard(i)
             tqdm.write("The following rasters for \"{}\" have already been processed and skipped: \n{}".format(nodeName, processedRaster))
         if len(rasterSet) == 0:
-            tqdm.write("The following gpkgs have already been processed and skipped: \n{}".format(nodeName))
-            return
+            tqdm.write("{} have already been processed and skipped.".format(nodeName))
+            return nodeName, processedRaster
         
         # Read one raster to get crs
-        dataNode = gpd.read_file(path, layer=layerNode[1], encoding="utf-8")
+        dataNode = gpd.read_file(path, layer=layer, encoding="utf-8")
         pixelSums = np.zeros(dataNode.shape[0], dtype=np.float64)
         with rio.open(list(rastersDict.keys())[0]) as src:
             rasterCrs = src.crs
@@ -173,52 +168,56 @@ class linkNodeWithSumOfRaster:
                 else:
                     processedRaster.append(raster)
 
-        loadJsonRecord.save(log, "populationRaster", {nodeName: processedRaster})
-        
-        return
+        return nodeName, processedRaster
 
-    def processAll(self, pathGpke: str, tifRootPath: str, maxThread: int = 1) -> None:
+    def processAll(self, pathGpke: str, tifRootPath: str, tifsFolderName: str, maxThread: int = 1) -> None:
         allGpkgs = set(readFiles(pathGpke).specificFile(suffix=["gpkg"]))
         # Checking processed gpkg will be processed in slef.processOneLayer
         bar = tqdm(total = len(allGpkgs), desc="Running KD-Trees and calculating populations", unit="layer")
+        # Update log
+        log = loadJsonRecord(os.path.join(pathGpke, "log.json"), "populationRaster", {})
+        
         futures = []
         debugDict = {}
         with ProcessPoolExecutor(max_workers=maxThread) as excutor:
             for gpkg in allGpkgs:
+                processedRaster = log.get(gpkg, [])
                 countryName = gpkg.split('.')[0]
                 path = os.path.join(pathGpke, gpkg)
                 # get all tifs
                 tifDict = {}
-                for tifs in readFiles(tifRootPath).specificFloder(contains=["population_"]):
+                for tifs in readFiles(tifRootPath).specificFloder(contains=[tifsFolderName]):
                     tifsPath = os.path.join(tifRootPath, tifs)
                     tif = readFiles(tifsPath).specificFile(suffix=["tif"], contains=[countryName])
                     if len(tif) == 0:
-                        raise RuntimeError("No corresponding tif file for {}".format(countryName))
+                        raise RuntimeError("No corresponding tif file for {} in {}".format(countryName, tifsPath))
                     else:
                         tif = tif[0]
                     tifDict[os.path.join(tifsPath, tif)] = tifs # tifs looks like population_All / population_All_children ...
-                future = excutor.submit(self.processOneLayer, (path, "nodes"), tifDict, maxThread)
+                future = excutor.submit(self.processOneLayer, (path, "nodes"), tifDict, processedRaster, maxThread)
                 futures.append(future)
                 debugDict[future] = "{}: {}".format(countryName)
                 
             for future in as_completed(futures):
                 countryName = debugDict[future]
                 try:
-                    future.result()
+                    nodeName, processedRaster = future.result()
                 except Exception as e:
                     tqdm.write("Error in processing {}.gpkg: {}".format(countryName, e))
                 else:
                     bar.update(1)
+                    log.append({nodeName: processedRaster})
         
+        log.save()
         bar.close()
 
         return
 
 if __name__ == "__main__":
-    linkNodeWithSumOfRaster(10240).processOneLayer(
-        ("test//CHN.gpkg", "nodes"),
-        {"test//pop_Nanjing.tif": "allPopulation"},
-        os.cpu_count()  # type: ignore
-    )
+    # linkNodeWithSumOfRaster(10240).processOneLayer(
+    #     ("test//CHN.gpkg", "nodes"),
+    #     {"test//pop_Nanjing.tif": "allPopulation"},
+    #     os.cpu_count()  # type: ignore
+    # )
 
-    # linkNodeWithSumOfRaster().processAll(r"C:\\0_PolyU\\roadsGraph", r"C:\\0_PolyU", os.cpu_count()) # type: ignore
+    linkNodeWithSumOfRaster().processAll(r"C:\\0_PolyU\\roadsGraph", r"C:\\0_PolyU", r"population_", os.cpu_count() ** 0.5) # type: ignore
