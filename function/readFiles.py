@@ -3,6 +3,12 @@ from typing import Iterator
 
 sys.path.append(".") # Set path to the roots
 
+# data structure method
+## list
+class newList(list):
+    def set(self):
+        return set(self)
+
 # Folder operation function
 ## Make a floder
 def mkdir(savePath: str) -> None:
@@ -34,7 +40,7 @@ class readFiles:
             for contain in contains:
                 result = result & set(x for x in allFolder if contain in x)
     
-        return list(result)
+        return newList(result)
     
     def specificFile(self, suffix: list[str] = [], contains: list[str] = []) -> list[str]:
         files = set(self.files)
@@ -44,7 +50,7 @@ class readFiles:
             for contain in contains:
                 files = files & set(x for x in files if contain in x)
                 
-        return list(files)
+        return newList(files)
 
 # Creat processed json record
 class loadJsonRecord:
@@ -91,7 +97,7 @@ class loadJsonRecord:
             elif value is None:
                 return default
             else:
-                return list(value)
+                return newList(value)
     
     # add update data
     def append(self, item: str | dict[str, list]) -> None:

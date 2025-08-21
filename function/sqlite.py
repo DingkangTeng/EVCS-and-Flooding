@@ -70,20 +70,20 @@ class modifyTable(sqlite3.Cursor):
         return
     
     def dropFields(self, tableName: str, *fieldNames: str) -> None:
-        cursor.execute(f"PRAGMA table_info({tableName})")
-        columns = [row[1] for row in cursor.fetchall()]
-        cursor.execute(f"PRAGMA index_list({tableName})")
-        indexes = [row[1] for row in cursor.fetchall()]
+        self.execute(f"PRAGMA table_info({tableName})")
+        columns = [row[1] for row in self.fetchall()]
+        self.execute(f"PRAGMA index_list({tableName})")
+        indexes = [row[1] for row in self.fetchall()]
         for fieldName in fieldNames:
             # Del index if exists
             relatedIndexes = []
             for index in indexes:
-                cursor.execute(f"PRAGMA index_info({index})")
-                indexColumns = [row[2] for row in cursor.fetchall()]
+                self.execute(f"PRAGMA index_info({index})")
+                indexColumns = [row[2] for row in self.fetchall()]
                 if fieldName in indexColumns:
                     relatedIndexes.append(index)
             for index in relatedIndexes:
-                cursor.execute(f"DROP INDEX {index}")
+                self.execute(f"DROP INDEX {index}")
             # Del column
             if fieldName in columns:
                 self.execute(
@@ -95,8 +95,15 @@ class modifyTable(sqlite3.Cursor):
 
         return
     
+    def dropTable(self, tableName: str) -> None:
+        self.execute(f"DROP TABLE IF EXISTS \"{tableName}\"")
+        self.execute(f"DELETE FROM gpkg_contents WHERE table_name = '{tableName}'")
+        self.execute(f"DELETE FROM gpkg_geometry_columns WHERE table_name = '{tableName}'")
+
+        return
+    
 if __name__ == "__main__":
-    conn = sqlite3.connect("test\\CHN.gpkg", factory=spatialiteConnection)
+    conn = sqlite3.connect("C:\\Users\\tengd\\Desktop\\FRA.gpkg", factory=spatialiteConnection)
     conn.loadSpatialite() # Load spatialite extension
     cursor = conn.cursor(factory=modifyTable)
     cursor.dropFields("nodes", "R", "A")

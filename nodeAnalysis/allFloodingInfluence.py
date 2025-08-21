@@ -24,14 +24,15 @@ class allFloodingInfluence:
             raise RuntimeError("Failed to load raster data.")
 
     @staticmethod
-    def executeMethod(
+    def processByFid(
         index: int,
         rasterInfo: tuple[str, str, tuple, str],
-        layerInfo: tuple[str, str, str]
+        layerInfo: tuple[str, str, str],
+        additionInfo: dict = {}
     ) -> list[int]:
             fid = index + 1
             process = getMaxPixelsValues()
-            process.updateInfo(rasterInfo, layerInfo)
+            process.updateInfo(rasterInfo, layerInfo, additionInfo)
             result = process.maxPixelsValuesByLayer(fid)
             if len(result) == 0:
                 maxDays = 0
@@ -78,7 +79,7 @@ class allFloodingInfluence:
                     futuresToIndex = {} # Mapping future for debug
                     for index in indexs:
                         # Update null value
-                        future = excutor.submit(self.executeMethod, index, self.rasterInfo, layerInfo)
+                        future = excutor.submit(self.processByFid, index, self.rasterInfo, layerInfo)
                         futures.append(future)
                         futuresToIndex[future] = index + 1
                     for future in as_completed(futures):

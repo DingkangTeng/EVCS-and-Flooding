@@ -235,17 +235,17 @@ class populationMerge(floodingMerge):
 if __name__ == "__main__":
     # Adjust the multi-thread number based on your computer, too much threads will cause memory overflow
     # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=4096).mergeByAge("CHN", "test")
-    populationMerge(r"C:\\0_PolyU\\population\\", blockSize=4096).mergeAll(r"C:\\0_PolyU\\population_All", multiThread=4)
-    # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_Male", gender=['m'], multiThread=4)
-    # populationMerge(r"C:\\0_PolyU\\population\\", blockSize=2048).mergeAll(r"C:\\0_PolyU\\population_Female", gender=['f'], multiThread=4)
+    # populationMerge(r"D:\\population\\", blockSize=1024*5).mergeAll(r"C:\\0_PolyU\\population_All", multiThread=4)
+    # populationMerge(r"D:\\population\\", blockSize=102400).mergeAll(r"C:\\0_PolyU\\population_Male", gender=['m'], multiThread=4)
+    # populationMerge(r"D:\\population\\", blockSize=1024*5).mergeAll(r"C:\\0_PolyU\\population_Female", gender=['f'], multiThread=4)
     # age group: Dyussenbayev, A. (2017). Age periods of human life. Advances in Social Sciences Research Journal, 4(6).
-    # ageGroup = {
-    #     "children": [x for x in range(0, 25, 5)] + [1],
-    #     "young": [x for x in range(25, 45, 5)],
-    #     "middle": [x for x in range(45, 60, 5)],
-    #     "elderly": [x for x in range(60, 81, 5)] # [x for x in range(60, 75, 5)]
-    #     # "senile&long_living": [x for x in range(75, 81, 5)]
-    # }
-    # for group in ["children", "young", "middle", "elderly"]:
-    #     populationMerge(r"C:\\0_PolyU\\population\\", blockSize=4096) \
-    #         .mergeAll("C:\\0_PolyU\\population_All_{}".format(group), mainAge=ageGroup[group], multiThread=4)
+    ageGroup = {
+        "children": [x for x in range(0, 25, 5)] + [1],
+        "young": [x for x in range(25, 45, 5)],
+        "middle": [x for x in range(45, 60, 5)],
+        "elderly": [x for x in range(60, 81, 5)] # [x for x in range(60, 75, 5)]
+        # "senile&long_living": [x for x in range(75, 81, 5)]
+    }
+    for group in ["children", "young", "middle", "elderly"]:
+        populationMerge(r"D:\\population\\", blockSize=1024*5) \
+            .mergeAll("C:\\0_PolyU\\population_All_{}".format(group), mainAge=ageGroup[group], multiThread=4)

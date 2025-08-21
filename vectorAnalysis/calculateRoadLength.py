@@ -27,9 +27,9 @@ class calculateRoadLength:
         cursor.execute(
             """
             UPDATE edges
-            SET length = (SELECT tempTable.length
-                        FROM tempTable 
-                        WHERE tempTable.fid = edges.fid)
+            SET length = tempTable.length
+                FROM tempTable 
+                WHERE tempTable.fid = edges.fid
             """
         )
         # cursor.execute(

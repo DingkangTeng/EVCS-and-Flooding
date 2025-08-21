@@ -82,6 +82,18 @@ class getMaxPixelsValues(getPixelsValues):
                 isQuery = False
             
             XMin, XMax, YMin, YMax = querylayer.GetExtent()
+            rasterXMin = self.geotrans[0]
+            rasterYMax = self.geotrans[3]
+            rasterXMax = rasterXMin + self.geotrans[1] * self.rasterWidth
+            rasterYMin = rasterYMax + self.geotrans[5] * self.rasterHeight
+            # if xy all outside the raster, return empty
+            if (
+                XMin > rasterXMax or
+                XMax < rasterXMin or
+                YMin > rasterYMax or
+                YMax < rasterYMin
+            ):
+                return []
 
             # Get raster data withing the layer extent
             with getRasterByRectangleBoundary(self.rasterPath, XMin, YMin, XMax, YMax) as memDs:
@@ -123,7 +135,7 @@ class getMaxPixelsValues(getPixelsValues):
 
                 # Filter results
                 result = maskedArray.reshape(-1)
-                result = result[result != 0]
+                result = result[(result != 0) & (~np.isnan(result))]
             
                 return result.tolist()  # Return the maximum pixel value along the layer
         

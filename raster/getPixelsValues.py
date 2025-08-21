@@ -13,7 +13,7 @@ from function.gdalFunction import gdalDatasets
 class getPixelsValues:
     __slots__ = [
         "layerPath", "layerName", "layerRef", "layerType",
-        "rasterPath", "projection", "geotrans", "ref",
+        "rasterPath", "projection", "geotrans", "ref",  "rasterWidth", "rasterHeight",
         "orgDatasets", "gdalDatasets"
     ]
     
@@ -25,6 +25,8 @@ class getPixelsValues:
         gdal.SetConfigOption("GDAL_NUM_THREADS", "ALL_CPUS")
         self.rasterPath: str | None = None
         self.layerName: str | None = None
+        self.rasterHeight: int | None = None
+        self.rasterWidth: int | None = None
         self.orgDatasets = orgDatasets
         self.gdalDatasets = gdalDatasets
         self.layerType = False # False means db data
@@ -74,10 +76,16 @@ class getPixelsValues:
             self.projection = rasterDs.GetProjection()
             self.geotrans = rasterDs.GetGeoTransform()
             self.ref = rasterDs.GetSpatialRef()
+            self.rasterWidth = rasterDs.RasterXSize
+            self.rasterHeight = rasterDs.RasterYSize
 
         return
     
-    def updateInfo(self, rasterInfo: tuple[str, str, tuple, str | osr.SpatialReference], layerInfo: tuple[str, str, str | osr.SpatialReference]) -> None:
+    def updateInfo(
+        self, rasterInfo: tuple[str, str, tuple, str | osr.SpatialReference],
+        layerInfo: tuple[str, str, str | osr.SpatialReference],
+        additionInfo: dict = {}
+    ) -> None:
         self.rasterPath, self.projection, self.geotrans, ref = rasterInfo
         self.layerPath, self.layerName, layerRef = layerInfo
         if os.path.basename(self.layerPath).split('.')[-1] == "shp":
@@ -94,6 +102,9 @@ class getPixelsValues:
             self.layerRef.ImportFromWkt(layerRef)
         else:
             self.layerRef = layerRef
+        if additionInfo != {}:
+            for key, value in additionInfo.items():
+                setattr(self, key, value)
 
         return
     

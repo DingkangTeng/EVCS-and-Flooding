@@ -118,5 +118,5 @@ class globalPopulation(crawler):
 
 if __name__ == "__main__":
     a = globalPopulation()
-    for country in ["IND", "IRN", "IRQ", "ISR", "JOR", "JPN", "KAZ", "KGZ", "KWT", "LAO", "LBN"]:
-        a.downloadOneCountryByISO(os.path.join("C:\\0_PolyU\\population_tmp", country), country)
+    for country in ["USA"]:
+        a.downloadOneCountryByISO(os.path.join("C:\\0_PolyU\\population2_tmp", country), country)

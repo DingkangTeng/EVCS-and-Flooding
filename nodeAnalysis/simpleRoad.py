@@ -147,21 +147,21 @@ class getSimpleRoad:
                     custom_filter=customFilter
                 )
             except Exception as e:
-                    if exceptionTimes == 0:
-                        exceptionCountry[0] = country
-                        exceptionCountry[1] = 1
-                        exceptionCountry[2].append(str(e))
-                        country = country.split(",")[0]  # Handle cases like "United States, California"
-                        exceptionTimes += 1
-                    elif exceptionTimes == 1:
-                        exceptionCountry[1] += 1
-                        exceptionCountry[2].append(str(e))
-                        if singleThread:
-                            print(e)
-                        else:
-                            tqdm.write("Error in geo-encoding after split country name to {}: {}".format(country, e))
-                        
-                        return exceptionCountry
+                if exceptionTimes == 0:
+                    exceptionCountry[0] = country
+                    exceptionCountry[1] = 1
+                    exceptionCountry[2].append(str(e))
+                    country = country.split(",")[0]  # Handle cases like "United States, California"
+                    exceptionTimes += 1
+                elif exceptionTimes == 1:
+                    exceptionCountry[1] += 1
+                    exceptionCountry[2].append(str(e))
+                    if singleThread:
+                        print(e)
+                    else:
+                        tqdm.write("Error in geo-encoding after split country name to {}: {}".format(country, e))
+                    
+                    return exceptionCountry
             else:
                 break
 
@@ -181,36 +181,15 @@ class getSimpleRoad:
     
     def getOneCountryFromFile(
         self,
-        filePath: str,
+        filePath: tuple[str, str],
         country: str,
         savePath: str,
         customFilter: list | None = None
     ) -> None | list:
         
-        def processLine(line: LineString, attributes: dict, nodes: dict, nodeIDs: list[int]) ->list[tuple[int, int, dict]]:
-            segments = []
-            coords = list(line.coords)
-            attributes["geometry"] = line
-
-            for coordxy in [coords[0], coords[-1]]:
-                coord = Point(coordxy[0], coordxy[1])
-                if coord not in nodes:
-                    nodes[coord] = nodeIDs[0]
-                    nodeIDs[0] += 1
-            u = nodes[Point(coords[0])]
-            v = nodes[Point(coords[-1])]
-            segments.append((u, v, attributes))
-            if not attributes["oneway"]:
-                verseAttr = copy.deepcopy(attributes)
-                verseAttr["geometry"] = LineString(coords[::-1]) # Reverse line
-                segments.append((v, u, verseAttr))
-
-            return segments
-        
         tqdm.write("Processing country: {} \nExtracting data from file...".format(country))
 
-        gdfOrigional = gpd.read_file(filePath, layer="lines", engine="pyogrio", use_arrow=True)
-        # gdfOrigional = gpd.read_file("_GISAnalysis\\TestData\\test.gdb", layer="rus", use_arrow=True, rows=1000)
+        gdfOrigional = gpd.read_file(filePath[0], layer=filePath[1], engine="pyogrio", use_arrow=True)
         if customFilter is not None:
             gdf = gdfOrigional[gdfOrigional["highway"].isin(customFilter)].copy()
             del gdfOrigional
@@ -249,9 +228,9 @@ class getSimpleRoad:
             attrs = row.drop("geometry").to_dict()
             if isinstance(lines, MultiLineString):
                 for line in lines.geoms:
-                    edges.extend(processLine(line, attrs, nodes, nodeIDs))
+                    edges.extend(self.processLine(line, attrs, nodes, nodeIDs))
             else:
-                edges.extend(processLine(lines, attrs, nodes, nodeIDs))
+                edges.extend(self.processLine(lines, attrs, nodes, nodeIDs))
             bar.update(1)
 
         # Check middle point and split edges
@@ -304,15 +283,25 @@ class getSimpleRoad:
         return
     
     @staticmethod
-    def checkCountry(path: str) -> list:
-        allCountries = set(countries_by_name.keys()) # All upper
-        # Exclude the countries that are already exist in the save path
-        existingFiles = readFiles(path).specificFile(suffix=["gpkg"])
-        existingCountries = set([COUNTRIES.get(f.split(".")[0]).name.upper() for f in existingFiles])
-        result = list(allCountries - existingCountries)
-        result.sort()
-        
-        return result
+    def processLine(line: LineString, attributes: dict, nodes: dict, nodeIDs: list[int]) ->list[tuple[int, int, dict]]:
+        segments = []
+        coords = list(line.coords)
+        attributes["geometry"] = line
+
+        for coordxy in [coords[0], coords[-1]]:
+            coord = Point(coordxy[0], coordxy[1])
+            if coord not in nodes:
+                nodes[coord] = nodeIDs[0]
+                nodeIDs[0] += 1
+        u = nodes[Point(coords[0])]
+        v = nodes[Point(coords[-1])]
+        segments.append((u, v, attributes))
+        if not attributes["oneway"]:
+            verseAttr = copy.deepcopy(attributes)
+            verseAttr["geometry"] = LineString(coords[::-1]) # Reverse line
+            segments.append((v, u, verseAttr))
+
+        return segments
 
     @staticmethod
     def splitEdges(edges: list[tuple[int, int, dict]], points: list[Point], tree: STRtree, nodes: dict[Point, int]) -> list[tuple[int, int, dict]]:
@@ -345,23 +334,32 @@ class getSimpleRoad:
             
         return newEdges
     
+    @staticmethod
+    def checkCountry(path: str) -> list:
+        allCountries = set(countries_by_name.keys()) # All upper
+        # Exclude the countries that are already exist in the save path
+        existingFiles = readFiles(path).specificFile(suffix=["gpkg"])
+        existingCountries = set([COUNTRIES.get(f.split(".")[0]).name.upper() for f in existingFiles])
+        result = list(allCountries - existingCountries)
+        result.sort()
+        
+        return result
+    
 if __name__ == "__main__":
     customFilter = " \
         [\"highway\"~\"^motorway$|^trunk$|^primary$|^secondary$|^tertiary$|^motorway_link$| \
         ^trunk_link$|^primary_link$|^secondary_link$|^tertiary_link$\"] \
     "
     # getSimpleRoad().getAllCountriesNetworksGraph("C:\\0_PolyU\\roadsGraph", customFilter=customFilter, multiThread=1) # type: ignore
-    # getSimpleRoad().getOneCountry("CHINA", "test2", customFilter=customFilter)
+    # getSimpleRoad().getOneCountry("JAPAN", "test2", customFilter=customFilter)
     customFilter = [
         "motorway", "trunk", "primary", "secondary", "tertiary", "motorway_link",
         "trunk_link", "primary_link", "secondary_link", "tertiary_link"
     ]
-    getSimpleRoad().getOneCountryFromFile("C:\\0_PolyU\\china-latest.osm.pbf", "CHN3", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
+    # getSimpleRoad().getOneCountryFromFile(("D:\\origionalOSMFile\\china-lastest.gdb", "china_lastest"), "CHN", "C:\\0_PolyU\\roadsGraph", customFilter=customFilter)
     print(getSimpleRoad.checkCountry("C:\\0_PolyU\\roadsGraph"))
 
-    # Un-download:
-    # {'FRANCE',d
-    #  'UNITED STATES OF AMERICA'}
-    # 中国下载的数据有问题，可能要原生数据
+    # Filter for bridges and tunnel for the origional data cleaning in China
+    ## other_tags LIKE '%"bridge"=>"yes"%' Or other_tags LIKE '%"layer"=>"-1"%' Or other_tags LIKE '%"layer"=>"1"%' Or z_order >= 9
 
     # Results have problem with road lenght, run calculateRoadLength after

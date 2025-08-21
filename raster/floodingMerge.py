@@ -1,4 +1,4 @@
-import sys, os, zipfile, threading, psutil, gc, shutil, time
+import sys, os, zipfile, threading, psutil, gc, time
 import rasterio as rio
 import pandas as pd
 import numpy as np
@@ -15,7 +15,7 @@ from function.readFiles import readFiles, mkdir
 class floodingMerge:
     __slots__ = ["path", "subThreadSize", "maxThread", "BLOCK_SIZE"]
 
-    def __init__(self, path: str, subThreadSize: int = 512, blockSize: int = 1024) -> None:
+    def __init__(self, path: str, subThreadSize: int = 512, blockSize: int = 4096) -> None:
         """
         Initialization setting
 
