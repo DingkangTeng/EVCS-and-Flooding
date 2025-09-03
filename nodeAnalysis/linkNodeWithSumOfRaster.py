@@ -1,4 +1,4 @@
-import sys, sqlite3, os, time, psutil, gc, random
+import sys, sqlite3, os, time, psutil, gc, random, threading
 import pandas as pd
 import geopandas as gpd
 import numpy as np
@@ -13,13 +13,15 @@ sys.path.append(".") # Set path to the roots
 
 from function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
 from function.readFiles import readFiles, loadJsonRecord
+from function.constant import GiB
 
 class linkNodeWithSumOfRaster:
-    __slots__ = ["BLOCK_SIZE_INIT", "THREAD_NUM"]
+    __slots__ = ["BLOCK_SIZE_INIT", "THREAD_NUM", "lock"]
 
     def __init__(self, blockSize: int = 4096, maxThread: int = 1) -> None:
         self.BLOCK_SIZE_INIT = blockSize
         self.THREAD_NUM = maxThread
+        self.lock = threading.Lock()
 
     @staticmethod
     def updateData(path: str, df: pd.DataFrame, fieldName: str) -> None:
@@ -64,13 +66,13 @@ class linkNodeWithSumOfRaster:
         # Check memeory
         repeatTime = 0
         while True:
-            if (psutil.virtual_memory().available > BLOCK_SIZE * BLOCK_SIZE * 256 \
-                and psutil.virtual_memory().available > 1024 ** 3) or \
+            if (psutil.virtual_memory().available > BLOCK_SIZE * BLOCK_SIZE * 32 \
+                and psutil.virtual_memory().available > GiB) or \
                 repeatTime > 3: # Check if memory is enough or exceed the repeat time
                     break
             else:
                 repeatTime += 1
-                time.sleep(random.randint(5, 10))
+                time.sleep(random.randint(1, 5))
                 gc.collect()
 
         i, j = ij
@@ -93,7 +95,7 @@ class linkNodeWithSumOfRaster:
         # check indices cache
         if indices is None:
             if tree is None or rowOff is None or colOff is None:
-                raise RuntimeError("tree, row, col is required when no indices caches")
+                raise RuntimeError("tree, row, col is required when no indices cache.")
             # Calculates coordinate of pixels center
             globalRows = rowOff + rows
             globalCols = colOff + cols
@@ -143,13 +145,14 @@ class linkNodeWithSumOfRaster:
             self,
             tree: KDTree | None, dataNode: gpd.GeoDataFrame, fieldName: str, indicesDict: dict[tuple[int, int], np.intp],
             raster: str, BLOCK_SIZE: int = 4096,
-            maxDistance: int | None = None
-        ) -> tuple[list[list[int | float]], int | None]:
+            maxDistance: int | None = None,
+            cache: bool = True
+        ) -> tuple[np.ndarray | None, int | None]:
 
         if fieldName in dataNode.columns:
             if dataNode[fieldName].sum() != 0:
                 tqdm.write("{} has already been processed.".format(fieldName))
-                return [], None
+                return None, None
         
         pixelSums = np.zeros(dataNode.shape[0], dtype=np.float64)
         name = os.path.basename(raster)
@@ -174,14 +177,7 @@ class linkNodeWithSumOfRaster:
         futures = []
         with ThreadPoolExecutor(max_workers=self.THREAD_NUM) as executor:
             for i in range(nChunksX):
-                for j in range(nChunksY):
-                    # Clean cache when memeory is less than 1 gib
-                    if psutil.virtual_memory().available < 1024 ** 3:
-                        tqdm.write("Out of memory, clean cache.")
-                        for _ in as_completed(futures):
-                            pass
-                        indicesDict = {}
-                        
+                for j in range(nChunksY):                     
                     # Submit task
                     indices = indicesDict.get((i, j), None)
                     if indices is not None:
@@ -195,31 +191,39 @@ class linkNodeWithSumOfRaster:
                     sums, ij, indices = future.result()
                 except Exception as e:
                     tqdm.write("Error: {}".format(e))
-                    return [], None
+                    return None, None
                 else:
                     pixelSums += sums
-                    # Only save caches when memory larger than 4 gib
-                    if psutil.virtual_memory().available > 4 * 1024 ** 3 and not np.array_equal(indices, indicesDict.get((ij[0], ij[1]), None)): # type: ignore
-                        indicesDict[ij] = indices
-                    else:
-                        del indices
+                    # Clean cache when memeory is less than 1 gib
+                    with self.lock:
+                        if psutil.virtual_memory().available < GiB:
+                            tqdm.write("Out of memory, clean cache.")
+                            indicesDict.clear()
+                            time.sleep(0.1)
+                            gc.collect()
+                        # Only save caches when memory larger than 8 gib
+                        if psutil.virtual_memory().available > BLOCK_SIZE * BLOCK_SIZE * 32 * self.THREAD_NUM and cache: # type: ignore
+                            indicesDict[ij] = indices
                     futures.remove(future)
                     gc.collect()
                     bar.update(1)
 
-        results = [
-            [
-                i + 1,
-                pixelSums[i],
-            ] for i in range(counts)
-        ]
+        results = np.zeros([counts, 2], dtype=np.float32)
+        results[:, 0] = np.arange(1, counts + 1, dtype=np.float32)
+        results[:, 1] = pixelSums
 
         bar.set_description("Saving results for {}".format(name))
         bar.close()
         
         return results, totalChunk
     
-    def processOneLayer(self, layerNode: tuple[str, str], rastersDict: dict[str, tuple[str, str]], processedRaster: list) -> tuple[str, list]:
+    def processOneLayer(
+        self,
+        layerNode: tuple[str, str],
+        rastersDict: dict[str, tuple[str, str]],
+        processedRaster: list,
+        cache: bool = True
+    ) -> tuple[str, list]:
         # Read node layer
         path, layer = layerNode
         nodeName = os.path.basename(path)
@@ -239,12 +243,13 @@ class linkNodeWithSumOfRaster:
         
         # Read one raster to get crs
         dataNode = gpd.read_file(path, layer=layer, encoding="utf-8")
+        dataNode.drop(columns=["osmid", "osmid_original", "x", "y", "street_count", "cluster"], inplace=True)
         key, value = next(iter(rastersDict.items()))
         with rio.open(os.path.join(value[0], key)) as src:
             rasterCrs = src.crs
             width, height = src.width, src.height
             if dataNode.crs != rasterCrs:
-                dataNode = dataNode.to_crs(rasterCrs)
+                dataNode = dataNode.to_crs(rasterCrs)   
 
         # Build KD-Tree
         node = np.array(list(zip(dataNode.geometry.x, dataNode.geometry.y)))
@@ -254,7 +259,7 @@ class linkNodeWithSumOfRaster:
         BLOCK_SIZE = int(min(
             self.BLOCK_SIZE_INIT, # Default max value
             max(width / self.THREAD_NUM, height / self.THREAD_NUM, self.BLOCK_SIZE_INIT), # by raster widith or hight to maximize utilitze CPU thread
-            ((psutil.virtual_memory().available - 2 * 1024 ** 3) / 256 / self.THREAD_NUM) ** 0.5, # by simply count raster size
+            ((psutil.virtual_memory().available - 2 * GiB) / 32 / self.THREAD_NUM) ** 0.5, # by simply count raster size
         ))
         if BLOCK_SIZE < 1024:
             tqdm.write(
@@ -268,14 +273,14 @@ class linkNodeWithSumOfRaster:
                 tqdm.write("All corresponding points have been cached, the tree is deleted to release memeory.")
             rasterRoot, fieldName = rastersDict[raster]
             rasterPath = os.path.join(rasterRoot, raster)
-            results, totalChunk = self.readOneTif(tree, dataNode, fieldName, indicesDict, rasterPath, BLOCK_SIZE)
-            if results != []:
+            results, totalChunk = self.readOneTif(tree, dataNode, fieldName, indicesDict, rasterPath, BLOCK_SIZE, cache=cache)
+            if not results is None:
                 self.updateData(path, pd.DataFrame(results, columns=["nodesFid", fieldName]), rastersDict[raster][1])
             processedRaster.append(os.path.basename(raster))
                 
         return nodeName, processedRaster
 
-    def processAll(self, pathGpke: str, tifRootPath: str, tifsFolderName: str) -> None:
+    def processAll(self, pathGpke: str, tifRootPath: str, tifsFolderName: str, cache: bool = True) -> None:
         allGpkgs = readFiles(pathGpke).specificFile(suffix=["gpkg"])
         totalBar = tqdm(total=len(allGpkgs), desc="Processing countries", unit="country")
         # Update log
@@ -297,7 +302,7 @@ class linkNodeWithSumOfRaster:
                     continue
                 tif = tif[0]
                 tifDict[tif] = (tifsPath, tifs) # tifs looks like population_All / population_All_children ...
-            nodeName, processedRaster = self.processOneLayer((path, "nodes"), tifDict, processedRaster)
+            nodeName, processedRaster = self.processOneLayer((path, "nodes"), tifDict, processedRaster, cache)
 
             log.append({nodeName: processedRaster})
             log.save()
@@ -314,13 +319,13 @@ if __name__ == "__main__":
     #     os.cpu_count()  # type: ignore
     # )
 
-    linkNodeWithSumOfRaster(maxThread=6).processAll(r"C:\\0_PolyU\\roadsGraph", r"C:\\0_PolyU", r"population_")
+    linkNodeWithSumOfRaster(maxThread=24).processAll(r"C:\\0_PolyU\\roadsGraph", r"C:\\0_PolyU", r"population_")
     # rasterDict = {
-    #     "JPN_allGender_[60, 65, 70, 75, 80]_merge.tif": (r"C:\0_PolyU\population_All_elderly", "population_All_elderly8"),
+    #     "JPN_allGender_[60, 65, 70, 75, 80]_merge.tif": (r"C:\0_PolyU\population_All_elderly", "population_All_elderly2"),
     #     "JPN_allGender_allAge_merge.tif": (r"C:\0_PolyU\population_All", "population_All"),
     #     "JPN_allGender_[25, 30, 35, 40]_merge.tif": (r"C:\0_PolyU\population_All_young", "population_All_young"),
     #     "JPN_allGender_[0, 1, 5, 10, 15, 20]_merge.tif": (r"C:\0_PolyU\population_All_children", "population_All_children"),
-    #     "JPN_allGender_[45, 50, 55]_merge.tif": (r"C:\0_PolyU\population_All_middle", "population_All_middle8"),
+    #     "JPN_allGender_[45, 50, 55]_merge.tif": (r"C:\0_PolyU\population_All_middle", "population_All_middle2"),
     #     "JPN_['f']_allAge_merge.tif": (r"C:\0_PolyU\population_Female", "population_Female"),
     #     "JPN_['m']_allAge_merge.tif": (r"C:\0_PolyU\population_Male", "population_Male")
     #     }

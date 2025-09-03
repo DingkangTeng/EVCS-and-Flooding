@@ -1,3 +1,4 @@
+GiB = 1024 ** 3
 # Country list is copied from 
 # "https://global-flood-database.cloudtostreet.ai/static/js/bundle.js"
 baseBands = 0
@@ -792,6 +793,3 @@ COUNTRIES_GFD = [{
   "name": "Zimbabwe",
   "bands": baseBands
 }]
-
-# from iso3166 import countries_by_name
-# COUNTRIES_ALL = countries_by_name.keys()
