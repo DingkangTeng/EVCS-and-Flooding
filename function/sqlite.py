@@ -101,11 +101,15 @@ class modifyTable(sqlite3.Cursor):
         self.execute(f"DELETE FROM gpkg_geometry_columns WHERE table_name = '{tableName}'")
 
         return
-    
+
+# Debug
 if __name__ == "__main__":
-    conn = sqlite3.connect("C:\\Users\\tengd\\Desktop\\FRA.gpkg", factory=spatialiteConnection)
+    import geopandas as gpd
+    df = gpd.read_file("test\\CHN.gpkg", layer="edges")
+    lista = df.columns[df.columns.str.contains("DFO_")].to_numpy()
+    conn = sqlite3.connect("test\\CHN.gpkg", factory=spatialiteConnection)
     conn.loadSpatialite() # Load spatialite extension
     cursor = conn.cursor(factory=modifyTable)
-    cursor.dropFields("nodes", "R", "A")
+    cursor.dropFields("edges", "affectDays2", *lista)
     conn.commit()
     conn.close()

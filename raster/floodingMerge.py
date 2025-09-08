@@ -10,7 +10,7 @@ from datetime import datetime
 
 sys.path.append(".") # Set path to the roots
 
-from function.readFiles import readFiles, mkdir
+from function.readFiles import readFiles
 
 class floodingMerge:
     __slots__ = ["path", "subThreadSize", "maxThread", "BLOCK_SIZE"]

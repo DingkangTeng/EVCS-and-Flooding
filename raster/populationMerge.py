@@ -13,7 +13,7 @@ sys.path.append(".") # Set path to the roots
 
 from function.readFiles import readFiles, mkdir
 from raster.floodingMerge import floodingMerge
-from function.gdalFunction import gdalDatasets
+from function.rasterFunction import gdalDatasets
 
 class populationMerge(floodingMerge):
 

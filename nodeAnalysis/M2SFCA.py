@@ -5,7 +5,7 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from concurrent.futures import as_completed, ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import as_completed, ThreadPoolExecutor
 
 sys.path.append(".") # Set path to the roots
 

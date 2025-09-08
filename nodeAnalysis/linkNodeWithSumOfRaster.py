@@ -28,8 +28,6 @@ class linkNodeWithSumOfRaster:
         conn = sqlite3.connect(path, factory=spatialiteConnection)
         conn.loadSpatialite() # Load spatialite extension
         cursor = conn.cursor(factory=modifyTable)
-        # cursor.execute("PRAGMA synchronous = WAL;")
-        # cursor.execute("PRAGMA journal_mode = NORMAL;")
         # Add field
         cursor.addFields("nodes", (fieldName, "Real", 0, False))
         cursor.execute(f"CREATE INDEX IF NOT EXISTS {FID_INDEX} ON nodes (fid)")
@@ -38,7 +36,6 @@ class linkNodeWithSumOfRaster:
         df.to_sql("tempTable", conn, if_exists="replace", index=False, method="multi", chunksize=16383) #32766//2
         cursor.execute(f"CREATE INDEX IF NOT EXISTS {FID_INDEX} ON tempTable (nodesFid)")
         conn.commit()
-        
         conn.execute("BEGIN TRANSACTION;")
         cursor.execute(
             f"""
@@ -165,12 +162,12 @@ class linkNodeWithSumOfRaster:
             nChunksY = int(np.ceil(height / BLOCK_SIZE))
             # Transform node again if crs is different, normally do not need
             if dataNode.crs != rasterCrs:
-                dataNode = dataNode.to_crs(rasterCrs)
+                dataNode.to_crs(rasterCrs, inplace=True)
                 node = np.array(list(zip(dataNode.geometry.x, dataNode.geometry.y)))
                 tree = KDTree(node)
                 indices = None
         
-        totalChunk = nChunksX*nChunksY
+        totalChunk = nChunksX * nChunksY
         bar = tqdm(total=totalChunk, desc="Processing {}".format(name), unit="chunks")
         counts = dataNode.shape[0]
 
@@ -249,7 +246,7 @@ class linkNodeWithSumOfRaster:
             rasterCrs = src.crs
             width, height = src.width, src.height
             if dataNode.crs != rasterCrs:
-                dataNode = dataNode.to_crs(rasterCrs)   
+                dataNode.to_crs(rasterCrs, inplace=True)   
 
         # Build KD-Tree
         node = np.array(list(zip(dataNode.geometry.x, dataNode.geometry.y)))
@@ -332,4 +329,4 @@ if __name__ == "__main__":
     # linkNodeWithSumOfRaster(maxThread=16, blockSize=1500).processOneLayer((r"C:\\0_PolyU\\test\\JPN.gpkg", "nodes"), rasterDict, [])
 
     # No corresponding population:
-    # JEY, GIB
+    # JEY, GIB, GGY, ALA, IOT, CXR, PCN, ATF, SJM, XKX, NFK
