@@ -10,12 +10,12 @@ sys.path.append(".") # Set path to the roots
 
 from function.readFiles import readFiles, loadJsonRecord
 from nodeAnalysis.sumFloodingInfluence import allFloodingInfluence
+from raster.initRaster import initRaster
 
 class maxFloodingInfluenec(allFloodingInfluence):
-    __slots__ = ["gpkgs", "gpkgPath", "rasters", "rasterRoot", "decompressRasterPath"]
+    __slots__ = ["gpkgPath", "rasters", "rasterRoot", "decompressRasterPath"]
 
     def __init__(self, gpkgPath: str, rasterRoot: str, decompressPath: str) -> None:
-        self.gpkgs = readFiles(gpkgPath).specificFile(["gpkg"])
         self.gpkgPath = gpkgPath
 
         self.rasters = readFiles(rasterRoot).allFolder()
@@ -25,10 +25,13 @@ class maxFloodingInfluenec(allFloodingInfluence):
         return
 
     def processOneRaster(self, gdf: gpd.GeoDataFrame, raster: str, excutor: ProcessPoolExecutor, bar: tqdm | None = None) -> np.ndarray:
-        super().__init__(raster)
-        if gdf.crs != self.crs:
+        rasterInfo = initRaster(raster)
+        crs = rasterInfo.crs
+        bounds = rasterInfo.bounds
+
+        if gdf.crs != crs:
             tqdm.write("Projecting!")
-            gdf.to_crs(self.crs, inplace=True)
+            gdf.to_crs(crs, inplace=True)
 
         results = np.empty([gdf.shape[0], 2], dtype=np.uint32) # Max 4294967295, because fid will exceed 65535
         chunk = 10000
@@ -39,7 +42,7 @@ class maxFloodingInfluenec(allFloodingInfluence):
             futures = []
             debugDict = {}
             for index, geom in zip(df.index, df.geometry):
-                future = excutor.submit(self.processByFid, index, geom)
+                future = excutor.submit(self.processByFid, index, raster, geom, bounds)
                 futures.append(future)
                 debugDict[future] = index
             
@@ -93,6 +96,7 @@ class maxFloodingInfluenec(allFloodingInfluence):
 
         for raster in rasters:
             rasterName = os.path.basename(raster).split('.')[0].replace('-','_')
+            # rasterName = rasterName  + "_3" # Change rastername for test here
             bar.set_description("Processing {} in {}".format(rasterName, gpkg))
 
             result = self.processOneRaster(gdf, raster, excutor, bar)
@@ -121,11 +125,13 @@ class maxFloodingInfluenec(allFloodingInfluence):
     
     @override
     def calculateAll(self, threadNum: int = 1, *agr, **agrs) -> None:
-        for gpkg in tqdm(self.gpkgs, desc="Processing all gpkgs", unit="gpkg"):
+        gpkgs = readFiles(self.gpkgPath).specificFile(["gpkg"])
+        for gpkg in tqdm(gpkgs, desc="Processing all gpkgs", unit="gpkg"):
             self.calOneGpkg(gpkg, threadNum)
 
         return
 
 # Debug
 if __name__ == "__main__":
-    maxFloodingInfluenec(r"C:\\0_PolyU\\test", r"D:\\flooding", r"D:\\floodingAll_Days").calculateAll(16) # type: ignore roadsGraph
+    maxFloodingInfluenec(r"C:\\0_PolyU\\roadsGraph", r"D:\\flooding", r"D:\\floodingAll_Days").calculateAll(16) # type: ignore 
+    # maxFloodingInfluenec(r"C:\\0_PolyU\\test", r"D:\\flooding", r"D:\\floodingAll_Days").calculateAll(16) # type: ignore 

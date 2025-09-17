@@ -59,8 +59,8 @@ class modifyTable(sqlite3.Cursor):
                         ADD COLUMN {fieldName} {colType}
                         """
                     )
-                if whetherIndex:
-                    self.addIndex(fieldName, tableName)
+            if whetherIndex:
+                self.addIndex(fieldName, tableName)
 
         return
     
@@ -105,9 +105,10 @@ class modifyTable(sqlite3.Cursor):
 # Debug
 if __name__ == "__main__":
     import geopandas as gpd
-    df = gpd.read_file("test\\CHN.gpkg", layer="edges")
-    lista = df.columns[df.columns.str.contains("DFO_")].to_numpy()
-    conn = sqlite3.connect("test\\CHN.gpkg", factory=spatialiteConnection)
+    # df = gpd.read_file("test\\CHN.gpkg", layer="edges")
+    # lista = df.columns[df.columns.str.contains("DFO_")].to_numpy()
+    lista = ("DFO_3787_From_20110311_to_20110311_3","DFO_3969_From_20120812_to_20120820_3")
+    conn = sqlite3.connect("C:\\0_PolyU\\test\\JPN.gpkg", factory=spatialiteConnection)
     conn.loadSpatialite() # Load spatialite extension
     cursor = conn.cursor(factory=modifyTable)
     cursor.dropFields("edges", "affectDays2", *lista)

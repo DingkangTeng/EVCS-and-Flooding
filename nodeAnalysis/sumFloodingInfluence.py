@@ -3,6 +3,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from rasterio.coords import BoundingBox
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 from shapely.geometry.base import BaseGeometry
 
@@ -14,15 +15,24 @@ from raster.initRaster import initRaster
 from raster.getPixelValuesByLine import getPixelValuesByLine
 
 # Already use window in getMaxPixelsValues, do not need extra memory management when executing
-class allFloodingInfluence(initRaster):
+class allFloodingInfluence:
+    __slots__ = ["__rasterPath", "__crs", "__bounds"]
 
+    def __init__(self, rasterPath: str) -> None:
+        self.__rasterPath = rasterPath
+        rasterInfo = initRaster(rasterPath)
+        self.__crs = rasterInfo.crs
+        self.__bounds = rasterInfo.bounds
+
+    @staticmethod
     def processByFid(
-        self,
         index: int,
-        geom: BaseGeometry
+        rasterPath: str,
+        geom: BaseGeometry,
+        bounds: BoundingBox
     ) -> tuple[int, int]:
             fid = index + 1
-            result = getPixelValuesByLine(geom, self.rasterPath, self.bounds)
+            result = getPixelValuesByLine(geom, rasterPath, bounds)
             if len(result) == 0:
                 maxDays = 0
             elif np.isnan(result).all():
@@ -36,8 +46,8 @@ class allFloodingInfluence(initRaster):
         # Initial gpkg data, skip the gpkg file which has been processed
         path = os.path.join(roadPath, gpkg)
         gdf = gpd.read_file(path, layer="edges", encoding="utf-8")
-        if gdf.crs != self.crs:
-            gdf.to_crs(self.crs, inplace=True)
+        if gdf.crs != self.__crs:
+            gdf.to_crs(self.__crs, inplace=True)
         gdf = gdf[gdf[fieldName].isna()]
         if gdf.shape[0] == 0:
             gdf = None
@@ -53,7 +63,7 @@ class allFloodingInfluence(initRaster):
             futuresToIndex = {} # Mapping future for debug
             for index, geom in zip(gdf.index, gdf.geometry):
                 # Update null value
-                future = excutor.submit(self.processByFid, index, geom)
+                future = excutor.submit(self.processByFid, index, self.__rasterPath, geom, self.__bounds)
                 futures.append(future)
                 futuresToIndex[future] = index + 1
             for future in as_completed(futures):
@@ -72,12 +82,12 @@ class allFloodingInfluence(initRaster):
         return success
 
     @staticmethod
-    def updateData(path: str, df: pd.DataFrame, fieldName: str) -> None:
+    def updateData(path: str, df: pd.DataFrame, fieldName: str, default = None) -> None:
         conn = sqlite3.connect(path, factory=spatialiteConnection)
         conn.loadSpatialite() # Load spatialite extension
         cursor = conn.cursor(factory=modifyTable)
         # Add field
-        cursor.addFields("edges", (fieldName, "Integer", None, True)) # Add fields if not exists
+        cursor.addFields("edges", (fieldName, "Integer", default, False)) # Add fields if not exists
         cursor.execute(f"CREATE INDEX IF NOT EXISTS {FID_INDEX} ON edges (fid)")
         conn.commit()
         # Add data
