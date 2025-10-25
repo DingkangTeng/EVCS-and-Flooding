@@ -12,7 +12,45 @@ from function.readFiles import readFiles, loadJsonRecord
 from nodeAnalysis.sumFloodingInfluence import allFloodingInfluence
 from raster.initRaster import initRaster
 
-class maxFloodingInfluenec(allFloodingInfluence):
+SPECIAL_REGION_DICT = {
+    # "GIB": "ESP"  
+    # "XKX": "SRB",
+    "ESH": ["MAR", "DZA", "MRT"],
+    "GLP": ["PRI", "VEN", "DOM", "GUY"],
+    "BRB": ["PRI", "VEN", "DOM", "GUY"],
+    "VCT": ["PRI", "VEN", "DOM", "GUY"],
+    "DMA": ["PRI", "VEN", "DOM", "GUY"],
+    "VIR": ["PRI", "VEN", "DOM", "GUY"],
+    "MTQ": ["PRI", "VEN", "DOM", "GUY"],
+    "AIA": ["PRI", "VEN", "DOM", "GUY"],
+    "MSR": ["PRI", "VEN", "DOM", "GUY"],
+    "MAF": ["PRI", "VEN", "DOM", "GUY"],
+    "GRD": ["PRI", "VEN", "DOM", "GUY"],
+    "VGB": ["PRI", "VEN", "DOM", "GUY"],
+    "KNA": ["PRI", "VEN", "DOM", "GUY"],
+    "BLM": ["PRI", "VEN", "DOM", "GUY"],
+    "TTO": ["PRI", "VEN", "DOM", "GUY"],
+    "LCA": ["PRI", "VEN", "DOM", "GUY"],
+    "BES": ["PRI", "VEN", "DOM", "GUY"],
+    "SXM": ["PRI", "VEN", "DOM", "GUY"],
+    "ATG": ["PRI", "VEN", "DOM", "GUY"],
+    "AND": ["FRA", "ESP"],
+    "TCA": ["DOM", "HTI", "CUB", "BHS"],
+    "BHR": ["SAU", "QAT", "IRN", "KWT"],
+    "CYP": ["TUR", "SYR", "LBN", "ISR", "EGY", "GRC"],
+    "SSD": ["SDN", "CAF", "COD", "UGA", "KEN", "ETH"],
+    "GUF": ["SUR", "BRA"],
+    "PSE": ["ISR", "EGY", "JOR", "LBN"],
+    "IMN": ["GBR", "IRL"],
+    "SMR": ["ITA"],
+    "MNE": ["ALB", "SRB", "BIH", "HRV"],
+    "CYM": ["CUB", "HTI", "COL", "PAN", "NIC", "HND", "BLZ", "GTM", "MEX"],
+    "JAM": ["CUB", "HTI", "COL", "PAN", "NIC", "HND", "BLZ", "GTM", "MEX"],
+    "MCO": ["FRA"],
+    "BRN": ["MYS", "VNM", "PHL"]
+}
+
+class singleFloodingInfluenec(allFloodingInfluence):
     __slots__ = ["gpkgPath", "rasters", "rasterRoot", "decompressRasterPath"]
 
     def __init__(self, gpkgPath: str, rasterRoot: str, decompressPath: str) -> None:
@@ -63,27 +101,34 @@ class maxFloodingInfluenec(allFloodingInfluence):
     @override
     def calOneGpkg(self, gpkg: str, threadNum: int = 1, *agr, **agrs) -> bool:
         country = gpkg.split('.')[0]
+        specialRegion = list(SPECIAL_REGION_DICT.keys())
         log = loadJsonRecord(os.path.join(self.gpkgPath, "log.json"), "Flooding_Road_By_Max_Influence", {})
         processedRaster = log.get(gpkg, [])
-        if country not in self.rasters:
+        if country not in self.rasters + specialRegion:
             tqdm.write("Do not found rasters for {}.".format(country))
             log.append({gpkg: ["Do not found rasters"]})
             log.save()
             return True
         
         # Read compressed raster files
-        rasterRoot = os.path.join(self.rasterRoot, country)
-        rasterZips = readFiles(rasterRoot).specificFile(["zip"])
+        ## Special region
+        if country in specialRegion:
+            rasterRoots = [os.path.join(self.rasterRoot, x) for x in SPECIAL_REGION_DICT[country]]
+        else:
+            rasterRoots = [os.path.join(self.rasterRoot, country)]
+        
         realTif = []
-        for file in rasterZips:
-            zipPath = os.path.join(rasterRoot, file)
-            z = zipfile.ZipFile(zipPath, 'r')
-            for tif in z.namelist():
-                if tif.split('.')[-1] != "tif":
-                    continue
-                elif tif not in processedRaster:
-                    realTif.append(tif)
-            z.close()
+        for rasterRoot in rasterRoots:
+            rasterZips = readFiles(rasterRoot).specificFile(["zip"])
+            for file in rasterZips:
+                zipPath = os.path.join(rasterRoot, file)
+                z = zipfile.ZipFile(zipPath, 'r')
+                for tif in z.namelist():
+                    if tif.split('.')[-1] != "tif":
+                        continue
+                    elif tif not in processedRaster:
+                        realTif.append(tif)
+                z.close()
         
         if len(realTif) == 0:
             return True
@@ -133,5 +178,5 @@ class maxFloodingInfluenec(allFloodingInfluence):
 
 # Debug
 if __name__ == "__main__":
-    maxFloodingInfluenec(r"C:\\0_PolyU\\roadsGraph", r"D:\\flooding", r"D:\\floodingAll_Days").calculateAll(16) # type: ignore 
-    # maxFloodingInfluenec(r"C:\\0_PolyU\\test", r"D:\\flooding", r"D:\\floodingAll_Days").calculateAll(16) # type: ignore 
+    singleFloodingInfluenec(r"C:\\0_PolyU\\roadsGraph", r"D:\\flooding", r"D:\\floodingAll_Days").calculateAll(16) # type: ignore 
+    # singleFloodingInfluenec(r"C:\\0_PolyU\\test", r"D:\\flooding", r"D:\\floodingAll_Days").calculateAll(16) # type: ignore 

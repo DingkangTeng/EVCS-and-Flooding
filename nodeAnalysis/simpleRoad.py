@@ -246,7 +246,7 @@ class getSimpleRoad:
 
         # Transform nodes to graph
         bar.set_description("Building graph...")
-        G = nx.MultiDiGraph(**metadata)
+        G = nx.MultiDiGraph(None, None, **metadata)
         for coord, node_id in nodes.items():
             G.add_node(node_id, x=coord.x, y=coord.y)
         for u, v, attrs in newEdges:

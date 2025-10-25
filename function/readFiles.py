@@ -1,5 +1,5 @@
 import sys, os, json
-from typing import Iterator
+from typing import Iterator, Any
 
 sys.path.append(".") # Set path to the roots
 
@@ -56,7 +56,7 @@ class readFiles:
 class loadJsonRecord:
     __slots__ = ["path", "name", "result"]
 
-    def __init__(self, path: str, name: str, structure: list[str] | dict[str, list[str]] = []):
+    def __init__(self, path: str, name: str, structure: list[str] | dict[str, list[str] | str] = []):
         self.path = path
         self.name = name
         self.result = structure
@@ -85,27 +85,34 @@ class loadJsonRecord:
     def __str__(self) -> str:
         return str(self.result)
     
-    def get(self, key: str, default: list = []) -> list[str]:
+    def __getitem__(self, i) -> Any:
+        return self.result[i]
+    
+    def get(self, key: str = "", default: list = []) -> newList:
         if isinstance(self.result, list):
-            return self.result
+            return newList(self.result)
         else:
             value = self.result.get(key, default)
             if isinstance(value, list):
-                return value
+                return newList(value)
             elif isinstance(value, str):
-                return [value]
+                return newList([value])
             elif value is None:
-                return default
+                return newList(default)
             else:
                 return newList(value)
     
     # add update data
-    def append(self, item: str | dict[str, list]) -> None:
+    def append(self, item: str | list[str] | dict[str, list[str] | str]) -> None:
         if isinstance(self.result, list) and isinstance(item, str):
             self.result.append(item)
+        elif isinstance(self.result, list) and isinstance(item, list):
+            self.result.extend(item)
         elif isinstance(self.result, dict) and isinstance(item, dict):
             key, result= next(iter(item.items()))
             self.result[key] = result
+        else:
+            raise RuntimeError("Unsupport format.")
 
     def save(self) -> None:
         if os.path.exists(self.path):
