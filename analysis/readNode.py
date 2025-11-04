@@ -1,13 +1,13 @@
 import pandas as pd
 import geopandas as gpd
 
-def readNode(path: str | tuple[str, str], minEvcsNum: int = 0, ignoreUneffected: bool = False) -> tuple[pd.DataFrame | gpd.GeoDataFrame, int, int]:
+def readNode(path: str | tuple[str, str], minEvcsNum: int = 10, ignoreUneffected: bool = False) -> tuple[pd.DataFrame | gpd.GeoDataFrame, int, int]:
     if isinstance(path, str):
         fileType = path.split('.')[-1]
         df = pd.read_parquet(path) if fileType == "parquet" else pd.read_csv(path)
     else:
         df = gpd.read_file(path[0], layer=path[1], encoding="utf-8")
-
+    
     n = df.shape[0]
     uniqueCountries = df["iso3"].unique()
     nc = len(uniqueCountries)

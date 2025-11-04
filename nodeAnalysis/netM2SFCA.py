@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from osmnx import convert
 from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 sys.path.append(".") # Set path to the roots
 
@@ -17,7 +18,10 @@ NODES_ATTR = [
 NODES_ATTR_POP = [
     "population_All_children", "population_All_young", "population_All_middle", "population_All_elderly",
     "population_Male", "population_Female",
-    "population_All",
+    "population_All", "otherRaster_landscan_global_2024"
+]
+NODES_ATTR_POI = [
+    "POI_1Num", "POI_2Num", "POI_3Num"
 ]
 EDGES_ATTR = [
     "length", "geometry"
@@ -34,11 +38,12 @@ def decayFunc(distance, d0, func: str) -> float:
         ")
 
 class M2SFCA:
-    __slots__ = ["file", "nodesIndex", "G", "GReversed", "quit"]
+    __slots__ = ["file", "demandAttrs", "nodesIndex", "G", "GReversed", "quit"]
 
-    def __init__(self, file: str) -> None:
+    def __init__(self, file: str, demandCol: list[str] = NODES_ATTR_POP + NODES_ATTR_POI) -> None:
         tqdm.write("Initialize graph {}...".format(file))
         self.file = file
+        self.demandAttrs = demandCol
         self.quit = False
         nodes = gpd.read_file(file, layer="nodes", encoding="utf-8").set_index("osmid")
         # Stop calculating when do not have evcs data
@@ -47,14 +52,14 @@ class M2SFCA:
                 self.quit = True
                 return
         
-        # Stop calculating when do not have population data
-        pop = []
-        for i in NODES_ATTR_POP:
-            if i in nodes.columns: pop.append(i)
-        if len(pop) == 0:
+        # Stop calculating when do not have demand data
+        demand = []
+        for i in demandCol:
+            if i in nodes.columns: demand.append(i)
+        if len(demand) == 0:
             self.quit = True
             return
-        nodes = nodes[NODES_ATTR + pop]
+        nodes = nodes[NODES_ATTR + demand]
 
         edges = gpd.read_file(file, layer="edges", encoding="utf-8").set_index(['u', 'v', "key"])[EDGES_ATTR]
         
@@ -101,8 +106,7 @@ class M2SFCA:
         return
     
     @staticmethod
-    def __demandDijkstra(G: nx.MultiDiGraph, node: int, d0: float, decay: str, demandAttrs: list[str], after: bool = False) -> np.ndarray:
-        supplyCols = ["EVCSNum", "EVCSNum_After"] if after else ["EVCSNum"]
+    def __demandDijkstra(G: nx.MultiDiGraph, node: int, d0: float, decay: str, demandAttrs: list[str], supplyCols: list[str]) -> np.ndarray:
         result = np.zeros([len(demandAttrs), len(supplyCols)],dtype=np.float32)
         # Calculate the accessable demand points from supply node within distance d0
         try:
@@ -136,7 +140,8 @@ class M2SFCA:
         d0: float, decay: str,
         supplyNodes: set[int],
         R: dict[int, np.ndarray],
-        demandAttrs: list[str], after: bool = False
+        demandAttrs: list[str],
+        supplyCols: list[str]
     ) -> np.ndarray | None:
         demandValues = []
         for demandAttr in demandAttrs:
@@ -144,7 +149,7 @@ class M2SFCA:
             demandValues.append(demandValue)
         if sum(demandValues) == 0: return None
 
-        supplyN = 2 if after else 1
+        supplyN = len(supplyCols)
         result = np.zeros([len(demandAttrs), supplyN],dtype=np.float32)
 
         # Calculate the accessable supply points from demand node within distance d0
@@ -162,50 +167,42 @@ class M2SFCA:
             for j, demandValue in enumerate(demandValues):
                 if demandValue == 0: continue
                 for k in range(supplyN):
-                    result[j][k] += data[2 * j + k] * weightVal if isinstance(data, np.ndarray) else 0
+                    result[j][k] += data[2 * j + k] * weightVal * weightVal if isinstance(data, np.ndarray) else 0 # 似乎这个地方改成w^2就可以？
             
         return result.flatten()
     
-    def calOneLayer(self, d0: float, decayFunc: str, demandAttrs: list[str], after: bool = False) -> bool:
+    def calOneLayer(self, d0: float, decayFunc: str, after: bool = False) -> bool:
         """
         filter:
         afterFlooding: calculates all population after flooding
         ...
         """
         if self.quit: return False
+        supplyCols = ["EVCSNum", "EVCSNum_After"] if after else ["EVCSNum"]
 
         fileName = os.path.basename(self.file)
-        cols = [x.split('_')[-1] for x in demandAttrs]
+        cols = [x.split('_')[-1] for x in self.demandAttrs]
         if after:
             cols = [item for pair in [(x, f"{x}_After") for x in cols] for item in pair]
 
         bar = tqdm(
-            total=len(self.nodesIndex) * 2 + 6,
+            total=len(self.nodesIndex) * 2 + 3,
             desc="Calcunating Demand in {}".format(fileName)
         )
         
-        # Demand point
+        # Supply ratios
         R = {}
         for node in self.nodesIndex:
-            R[node] = self.__demandDijkstra(self.G, node, d0, decayFunc, demandAttrs, after)
+            R[node] = self.__demandDijkstra(self.G, node, d0, decayFunc, self.demandAttrs, supplyCols)
             bar.update(1)
 
-        # Save R
-        bar.set_description("Saving result of R in {}".format(fileName))
         supplyNodes = set(R.keys())
-        rCols = ["R_{}".format(x) for x in cols]
-        resultR = pd.DataFrame.from_dict(R, orient='index', columns=rCols)
-        resultR["fid"] = resultR.index + 1
-        self.updateData(self.file, resultR, rCols)
-        bar.update(3)
-        del resultR, rCols
-        gc.collect()
 
         # Accessibility
         bar.set_description("Calcunating Supply in {}".format(fileName))
         A = {}
         for node in self.nodesIndex:
-            result = self.__supplyDijKstra(self.GReversed, node, d0, decayFunc, supplyNodes, R, demandAttrs, after)
+            result = self.__supplyDijKstra(self.GReversed, node, d0, decayFunc, supplyNodes, R, self.demandAttrs, supplyCols)
             if result is not None: A[node] = result
             bar.update(1)
 
@@ -215,34 +212,54 @@ class M2SFCA:
         resultA = pd.DataFrame.from_dict(A, orient='index', columns=aCols)
         resultA["fid"] = resultA.index + 1
         self.updateData(self.file, resultA, aCols)
-        bar.update(3)
+        bar.update(1)
 
         bar.close()
         
         return True
     
-    @staticmethod
-    def calAllLayer(path: str, d0: int, decayFunc: str) -> None:
-        log = loadJsonRecord(os.path.join(path, "log.json"), "M2SFCA", [])
-        processed = log.get()
-        gpkgs = readFiles(path).specificFile(["gpkg"])
-        gpkgs.sort()
+def calAllLayer(path: str, d0: int, decayFunc: str, col: list[str] = NODES_ATTR_POP + NODES_ATTR_POI, maxThread: int = 1) -> None:
+    log = loadJsonRecord(os.path.join(path, "log.json"), "M2SFCA", [])
+    processed = log.get()
+    gpkgs = readFiles(path).specificFile(["gpkg"])
+    gpkgs.sort()
+    
+    n =len(gpkgs)
+    # futures = []
+    # debugDict = {}
+
+    # executor = ProcessPoolExecutor(max_workers=maxThread)
+    # for i, gpkg in enumerate(gpkgs):
+    #     if gpkg in processed: continue
+    #     tqdm.write("Processing {}({}/{})".format(gpkg, i + 1, n))
         
-        n =len(gpkgs)
+    #     intit = M2SFCA(os.path.join(path, gpkg), col)
+    #     future = executor.submit(intit.calOneLayer, d0, decayFunc, after=True)
+    #     futures.append(future)
+    #     debugDict[future] = gpkg
 
-        for i, gpkg in enumerate(gpkgs):
-            if gpkg in processed: continue
-            tqdm.write("Processing {}({}/{})".format(gpkg, i + 1, n))
-            
-            result = M2SFCA(os.path.join(path,gpkg)).calOneLayer(d0, decayFunc, NODES_ATTR_POP, after=True)
-            
-            log.append(gpkg) if result else None
-            log.save()
+    # for future in as_completed(futures):
+    #     gpkg = debugDict[future]
+    #     try:
+    #         result = future.result()
+    #     except Exception as e:
+    #         raise RuntimeError(f"Failed process {gpkg}: {e}")
+    #     else:
+    #         log.append(gpkg) if result else None
+    #         log.save()
+    for i, gpkg in enumerate(gpkgs):
+        if gpkg in processed: continue
+        tqdm.write("Processing {}({}/{})".format(gpkg, i + 1, n))
+        
+        result = M2SFCA(os.path.join(path,gpkg), col).calOneLayer(d0, decayFunc, after=True)
+        
+        log.append(gpkg) if result else None
+        log.save()
 
-        return
+    return
     
 if __name__ == "__main__":
-    # a = M2SFCA(r"C:\\0_PolyU\\test\\JPN.gpkg")
-    # a.calOneLayer(1000, "Gaussian", "population_All", maxThreads=os.cpu_count()) # type: ignore
+    # a = M2SFCA(r"C:\0_PolyU\roadsGraph_BeijinInner\CHN.gpkg")
+    # a.calOneLayer(1000, "Gaussian", "population_All") # type: ignore
     # a.calOneLayer(1000, "Gaussian", "population_All", after=True, maxThreads=os.cpu_count()) # type: ignore
-    M2SFCA.calAllLayer(r"C:\\0_PolyU\\roadsGraph", 1000, "Gaussian")
+    calAllLayer(r"C:\\0_PolyU\\roadsGraph", 1000, "Gaussian", maxThread=4)

@@ -41,13 +41,11 @@ class mergeData:
                 continue
 
             nodes = gpd.read_file(path, layer="nodes", encoding="utf-8").set_index("osmid")
-            R = []
             A = []
             P = []
             for col in nodes.columns:
-                R.append(col) if col[0:2] == "R_" \
-                    else A.append(col) if col[0:2] == "A_" \
-                    else P.append(col) if col[0:10] == "population" \
+                A.append(col) if col[0:2] == "A_" \
+                    else P.append(col) if col[0:10] == "population" or (col[0:3] == "POI" and col[-4:] != "Fids") or col[0:11] == "otherRaster" \
                     else None
             # Sikp country have no accessibility
             if nodes[A].sum().sum() == 0:

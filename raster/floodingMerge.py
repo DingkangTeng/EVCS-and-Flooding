@@ -154,7 +154,7 @@ class floodingMerge:
         meta["num_threads"] = "ALL_CPUS"
 
         rasterData = os.path.join(savePath, "{}.tif".format(tif))
-        with rio.open(rasterData, 'w', **meta) as dst:
+        with rio.open(rasterData, 'w', options=["NUM_THREADS=ALL_CPUS"], **meta) as dst:
             dst.write(data, 1)
         
         # Release memory

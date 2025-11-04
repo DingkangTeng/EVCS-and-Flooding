@@ -77,14 +77,7 @@ class modifyTable(sqlite3.Cursor):
         indexes = [row[1] for row in self.fetchall()]
         for fieldName in fieldNames:
             # Del index if exists
-            relatedIndexes = []
-            for index in indexes:
-                self.execute(f"PRAGMA index_info({index})")
-                indexColumns = [row[2] for row in self.fetchall()]
-                if fieldName in indexColumns:
-                    relatedIndexes.append(index)
-            for index in relatedIndexes:
-                self.execute(f"DROP INDEX {index}")
+            self.__dropIndexByList(fieldName, indexes)
             # Del column
             if fieldName in columns:
                 self.execute(
@@ -93,25 +86,63 @@ class modifyTable(sqlite3.Cursor):
                     DROP COLUMN {fieldName}
                     """
                 )
+        
+        conn.execute("VACUUM")
 
         return
+    
+    def dropIndex(self, tableName: str, *fieldNames: str) -> None:
+        self.execute(f"PRAGMA table_info({tableName})")
+        columns = [row[1] for row in self.fetchall()]
+        self.execute(f"PRAGMA index_list({tableName})")
+        indexes = [row[1] for row in self.fetchall()]
+        for fieldName in fieldNames:
+            if fieldName in columns: self.__dropIndexByList(fieldName, indexes)
+        
+        conn.execute("VACUUM")
+
+        return
+    
+    def __dropIndexByList(self, fieldName: str, indexes: list) -> None:
+        relatedIndexes = []
+        for index in indexes:
+            self.execute(f"PRAGMA index_info({index})")
+            indexColumns = [row[2] for row in self.fetchall()]
+            if fieldName in indexColumns:
+                relatedIndexes.append(index)
+        
+        for index in relatedIndexes:
+            self.execute(f"DROP INDEX {index}")
+
+        return None
     
     def dropTable(self, tableName: str) -> None:
         self.execute(f"DROP TABLE IF EXISTS \"{tableName}\"")
         self.execute(f"DELETE FROM gpkg_contents WHERE table_name = '{tableName}'")
         self.execute(f"DELETE FROM gpkg_geometry_columns WHERE table_name = '{tableName}'")
+        conn.execute("VACUUM")
 
         return
 
 # Debug
 if __name__ == "__main__":
     import geopandas as gpd
+    import readFiles
+    from tqdm import tqdm
     # df = gpd.read_file("test\\CHN.gpkg", layer="edges")
     # lista = df.columns[df.columns.str.contains("DFO_")].to_numpy()
-    lista = ("DFO_3787_From_20110311_to_20110311_3","DFO_3969_From_20120812_to_20120820_3")
-    conn = sqlite3.connect("C:\\0_PolyU\\test\\JPN.gpkg", factory=spatialiteConnection)
-    conn.loadSpatialite() # Load spatialite extension
-    cursor = conn.cursor(factory=modifyTable)
-    cursor.dropFields("edges", "affectDays2", *lista)
-    conn.commit()
-    conn.close()
+    files = readFiles.readFiles(r"C:\0_PolyU\roadsGraph").specificFile(["gpkg"])
+    files.sort()
+    bar = tqdm(total=len(files))
+    for x in files:
+        bar.set_description(x)
+        # columns = gpd.read_file(r"C:\\0_PolyU\\roadsGraph\\" + x, layer="nodes").columns.to_list()
+        # lista = [x for x in columns if x[:2] == "R_"]
+        conn = sqlite3.connect(r"C:\\0_PolyU\\roadsGraph\\" + x, factory=spatialiteConnection)
+        conn.loadSpatialite() # Load spatialite extension
+        cursor = conn.cursor(factory=modifyTable)
+        cursor.dropFields("nodes", "EVCSNum", "EVCSFids", "EVCSNum_After", "EVCSFids_After")
+        # cursor.dropIndex("nodes", "EVCSNum", "EVCSNum_After")
+        conn.commit()
+        conn.close()
+        bar.update()

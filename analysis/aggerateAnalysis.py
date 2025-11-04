@@ -7,11 +7,25 @@ sys.path.append(".") # Set path to the roots
 
 from _plot import plotSet, plt
 from analysis.readNode import readNode
-from analysis import A_AFTER, A_BEFORE, A
+from analysis import A_POI, A_POP
 
-def aggerateAnalysis(path: str | tuple[str, str], savePath: str, saveName: str, minEvcsNum: int = 0) -> None:
+def aggerateAnalysis(
+    path: str | tuple[str, str], analysisType: str,
+    savePath: str, saveName: str,
+    minEvcsNum: int = 0
+) -> None:
+    if analysisType == "POI":
+        A_BEFORE = list(A_POI.before)
+        A_AFTER = list(A_POI.after)
+    else:
+        A_BEFORE = list(A_POP.before)
+        A_AFTER = list(A_POP.after)
+
     df, n, nc = readNode(path, minEvcsNum)
-    df = df[A + ["iso3"]].fillna(0)
+    df = df[A_BEFORE + A_AFTER + ["iso3"]].fillna(0)
+
+    # Ignore isolated vertices and connected components
+    df.drop(df.loc[df["city"] == "Isolated"].index, inplace=True) if "city" in df.columns else None
 
     ratio = np.ndarray([len(A_BEFORE)], dtype=object)
     results = np.ndarray([len(A_BEFORE)], dtype=pd.DataFrame)
@@ -50,19 +64,21 @@ def aggerateAnalysis(path: str | tuple[str, str], savePath: str, saveName: str, 
     plt.close()
 
     # Country base plot
-    fig, ax = plt.figure("D")
-    df.dropna(subset="A_All_changeRatio", inplace=True)
-    order = df.groupby("iso3")["A_All_changeRatio"].median().sort_values().index
-    print(f"There are {len(order)} countries ({len(order) / nc * 100:.2f}%) suffered decreasing in accessibility")
-    sns.boxplot(
-        ax = ax,
-        data = df,
-        x="A_All_changeRatio", y="iso3",
-        order=order,
-        showfliers = False
-    )
-    plt.plot()
-    plt.close()
+    for a in A_BEFORE:
+        col = "{}_changeRatio".format(a)
+        fig, ax = plt.figure("H")
+        df.dropna(subset=col, inplace=True)
+        order = df.groupby("iso3")[col].median().sort_values().index
+        print(f"There are {len(order)} countries ({len(order) / nc * 100:.2f}%) suffered decreasing in accessibility")
+        sns.boxplot(
+            ax = ax,
+            data = df,
+            x=col, y="iso3",
+            order=order,
+            showfliers = False
+        )
+        plt.plot(os.path.join(savePath, "{}_{}".format(saveName, a)))
+        plt.close()
 
     return
 
@@ -70,5 +86,5 @@ def aggerateAnalysis(path: str | tuple[str, str], savePath: str, saveName: str, 
 if __name__ == "__main__":
     # aggerateAnalysis(r"C:\\0_PolyU\\merge.parquet", r"C:\\0_PolyU\\test", "nodes", 10)
     # # aggerateAnalysis((r"C:\\0_PolyU\\merge.gpkg", "nodes"), r"C:\\0_PolyU\\test", 10)
-    # aggerateAnalysis(r"C:\\0_PolyU\\test\\city.csv", r"C:\\0_PolyU\\test", "city", 10)
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", r"C:\\0_PolyU\\test", "iso3", 10)
+    aggerateAnalysis(r"C:\\0_PolyU\\test\\city.csv", "POI", r"C:\\0_PolyU\\test", "city", 10)
+    # aggerateAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", r"C:\\0_PolyU\\test", "iso3", 10)

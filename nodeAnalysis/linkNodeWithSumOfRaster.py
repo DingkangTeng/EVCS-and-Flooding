@@ -8,11 +8,12 @@ from scipy.spatial import KDTree
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from rasterio.windows import Window
 from rasterio.transform import xy
+from rasterio.mask import mask
 
 sys.path.append(".") # Set path to the roots
 
 from function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
-from function.readFiles import readFiles, loadJsonRecord
+from function.readFiles import readFiles, loadJsonRecord, mkdir
 from function.constant import GiB
 
 class linkNodeWithSumOfRaster:
@@ -240,7 +241,8 @@ class linkNodeWithSumOfRaster:
         
         # Read one raster to get crs
         dataNode = gpd.read_file(path, layer=layer, encoding="utf-8")
-        dataNode.drop(columns=["osmid", "osmid_original", "x", "y", "street_count", "cluster"], inplace=True)
+        dropCol = [col for col in ["osmid", "osmid_original", "x", "y", "street_count", "cluster"] if col in dataNode.columns]
+        dataNode.drop(columns=dropCol, inplace=True)
         key, value = next(iter(rastersDict.items()))
         with rio.open(os.path.join(value[0], key)) as src:
             rasterCrs = src.crs
@@ -308,6 +310,72 @@ class linkNodeWithSumOfRaster:
         totalBar.close()
 
         return
+    
+    def processWithOneTif(self, pathGpke: str, tifPath: str, boundaryPath: str | tuple[str, str], countryCol: str) -> None:
+        if isinstance(boundaryPath, str):
+            boundary = gpd.read_file(boundaryPath, encoding="utf-8", usecols=[countryCol, "geometry"])
+        else:
+            boundary = gpd.read_file(boundaryPath[0], layer=boundaryPath[1], encoding="utf-8")
+            boundary = boundary[[countryCol, "geometry"]]
+        
+        allGpkgs = readFiles(pathGpke).specificFile(suffix=["gpkg"])
+        allGpkgs.sort()
+        tifDir = os.path.dirname(tifPath)
+        tmpDir = os.path.join(tifDir, "tmp")
+        tif = "otherRaster_{}".format(os.path.basename(tifPath).split('.')[0].replace('-','_'))
+        mkdir(tmpDir)
+
+        totalBar = tqdm(total=len(allGpkgs), desc="Processing countries", unit="country")
+        # Update log
+        log = loadJsonRecord(os.path.join(pathGpke, "log.json"), tif, [])
+        
+        for gpkg in allGpkgs:
+            if gpkg in log:
+                totalBar.update()
+                continue
+            countryName = gpkg.split('.')[0]
+            path = os.path.join(pathGpke, gpkg)
+            # Creat tmp tif file
+            tmpPath = os.path.join(tmpDir, tif)
+            geoseries = boundary.loc[boundary[countryCol] == countryName]
+            if len(geoseries) == 0: continue
+            ## Check crs
+            with rio.open(tifPath) as src:
+                rasterCrs = src.crs
+                if geoseries.crs != rasterCrs: geoseries.to_crs(rasterCrs, inplace=True)
+
+            ## Clip
+            bounds = geoseries.union_all() # if len(geoseries) > 1 else geoseries.iloc[0]
+            with rio.open(tifPath, options=["NUM_THREADS=ALL_CPUS"]) as src:
+                outImage, outTransform = mask(
+                    src, 
+                    [bounds.__geo_interface__], 
+                    crop=True,
+                    all_touched=True
+                )
+                outImage[outImage == src.nodata] = 0
+                out_meta = src.meta.copy()
+                out_meta.update({
+                    "driver": "GTiff",
+                    "height": outImage.shape[1],
+                    "width": outImage.shape[2],
+                    "transform": outTransform,
+                    "nodata": 0
+                })
+                with rio.open(tmpPath, "w", options=["NUM_THREADS=ALL_CPUS"], **out_meta) as dest:
+                    dest.write(outImage)
+
+            self.processOneLayer((path, "nodes"), {tif: (tmpDir, tif)}, [], cache=False)
+            
+            os.remove(tmpPath)
+            log.append(gpkg)
+            log.save()
+            totalBar.update(1)
+        
+        os.rmdir(tmpDir)
+        totalBar.close()
+
+        return
 
 if __name__ == "__main__":
     # linkNodeWithSumOfRaster(10240, 16).processOneLayer(
@@ -316,7 +384,7 @@ if __name__ == "__main__":
     #     os.cpu_count()  # type: ignore
     # )
 
-    linkNodeWithSumOfRaster(maxThread=24).processAll(r"C:\\0_PolyU\\roadsGraph", r"C:\\0_PolyU", r"population_")
+    # linkNodeWithSumOfRaster(maxThread=16).processAll(r"C:\\0_PolyU\\roadsGraph", r"C:\\0_PolyU", r"population_")
     # rasterDict = {
     #     "JPN_allGender_[60, 65, 70, 75, 80]_merge.tif": (r"C:\0_PolyU\population_All_elderly", "population_All_elderly2"),
     #     "JPN_allGender_allAge_merge.tif": (r"C:\0_PolyU\population_All", "population_All"),
@@ -330,3 +398,10 @@ if __name__ == "__main__":
 
     # No corresponding population:
     # JEY, GIB, GGY, ALA, IOT, CXR, PCN, ATF, SJM, XKX, NFK
+
+    linkNodeWithSumOfRaster(maxThread=16).processWithOneTif(
+        r"C:\\0_PolyU\\roadsGraph",
+        r"C:\\0_PolyU\\landscan-global-2024-assets\\landscan-global-2024.tif",
+        (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"),
+        "iso3_code"
+    )
