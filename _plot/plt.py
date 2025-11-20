@@ -12,7 +12,7 @@ from .setting import FIG_SIZE
 # plt original function
 from matplotlib.pyplot import (
     close, legend,
-    ticklabel_format
+    yticks, xticks, ticklabel_format
 )
 
 # Print or save fig

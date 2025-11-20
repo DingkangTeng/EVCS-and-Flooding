@@ -92,6 +92,19 @@ class mergeData:
         
         dfs = dfs[0: -skip]
         df = gpd.pd.concat(dfs)
+
+        # Delete city having no flooding affected record
+        df["EVCSChange"] = df["EVCSNum_After"] / df["EVCSNum"] * 100 - 100
+        cityStats = df.groupby("city").agg({
+            "affected": "sum",
+            "EVCSChange": "sum",
+        }).reset_index()
+        cityStats = cityStats[
+            (cityStats["affected"] == 0) & 
+            (cityStats["EVCSChange"] == 0)
+        ]["city"].tolist()
+        df = df[~df["city"].isin(cityStats)]
+
         gpd.GeoDataFrame(df, crs=dfs[0].crs).to_file(
             os.path.join(savePath, "merge.gpkg"),
             layer="nodes",

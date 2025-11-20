@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 @dataclass
 class A_POI:
-    before: tuple = ("A_1Num", "A_2Num", "A_3Num")
+    before: tuple = ("A_1Num", "A_2Num", "A_3Num", "A_POIAll")
     after: tuple = tuple(["{}_After".format(i) for i in before])
 @dataclass
 class A_POP:
-    before: tuple = ("A_children", "A_young", "A_middle", "A_elderly", "A_Male", "A_Female", "A_All")
+    before: tuple = ("A_children", "A_young", "A_middle", "A_elderly", "A_Male", "A_Female", "A_All", "A_2024")
     after: tuple = tuple(["{}_After".format(i) for i in before])
 
 A_BEFORE = list(A_POI.before) + list(A_POP.before)
@@ -33,7 +33,11 @@ POP_DICT = {
     "A_2Num_After": "POI_2Num",
     "A_3Num": "POI_3Num",
     "A_3Num_After": "POI_3Num",
-    "": "otherRaster_landscan_global_2024"
+    "A_2024": "otherRaster_landscan_global_2024",
+    "A_2024_After": "otherRaster_landscan_global_2024",
+    "A_POIAll": "POI_POIAll",
+    "A_POIAll_After": "POI_POIAll"
+
 }
 
 from .mergeResult import mergeData

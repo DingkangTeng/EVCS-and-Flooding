@@ -3,22 +3,25 @@ import pandas as pd
 
 sys.path.append(".") # Set path to the roots
 
-from analysis.readNode import readNode
+from analysis.__readNode import readNode
 from _plot import plotSet, plt, BAR_COLORS
-from analysis import A_BEFORE, A_AFTER
+from analysis import A_AFTER, A_BEFORE
 
-def demograpicDiff(path: str, diffType: str, minEvcsNum: int = 0) -> None:
+def demograpicDiff(path: str, diffType: str, accOrEquity : str = "accessibility", minEvcsNum: int = 0) -> None:
     plotSet()
     df, n, nc = readNode(path, minEvcsNum, ignoreUneffected=True)
-    # df.set_index("iso3", inplace=True)
 
-    diff = ["{}_diff".format(col) for col in A_BEFORE]
-    for i, col in enumerate(A_BEFORE):
-        df[diff[i]] = (df[A_AFTER[i]] / df[col] - 1) * 100
+    ABefore = ["{}_Gini".format(x) for x in A_BEFORE] if accOrEquity == "equity" else A_BEFORE
+    AAfter = ["{}_Gini".format(x) for x in A_AFTER] if accOrEquity == "equity" else A_AFTER
+    
+
+    diff = ["{}_diff".format(col) for col in ABefore]
+    for i, col in enumerate(ABefore):
+        df[diff[i]] = (df[AAfter[i]] / df[col] - 1) * 100
 
     fig, ax = plt.figure("H")
     
-    sub, x = calDiff(df, diffType)
+    sub, x = calDiff(df, diffType, accOrEquity)
     for i, col in enumerate(x):
         positive = sub[sub[col] > 0]
         zero = sub[sub[col] == 0]
@@ -52,15 +55,31 @@ def demograpicDiff(path: str, diffType: str, minEvcsNum: int = 0) -> None:
     # ax.set_xticklabels(df.index, rotation=45)
     ax.set_ylim(0, df.shape[0])
 
-    # plt.legend()
-    
-    plt.plot("test//a.jpg")
+    # 创建自定义图例元素
+    from matplotlib.lines import Line2D
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', markersize=8, label='Negative'),
+        Line2D([0], [0], marker='^', color='w', markerfacecolor='gray', markersize=8, label='Zero'),
+        Line2D([0], [0], marker='s', color='w', markerfacecolor='gray', markersize=8, label='Positive')
+    ]
 
-def calDiff(df: pd.DataFrame, diffType: str) -> tuple[pd.DataFrame, list[str]]:
+    # 添加颜色图例（如果不同颜色代表不同含义）
+    for i, col in enumerate(x):
+        legend_elements.append(
+            Line2D([0], [0], marker='o', color='w', markerfacecolor=BAR_COLORS[0][i], markersize=8, label=col)
+        )
+    
+    ax.legend(handles=legend_elements, loc="lower right")
+    
+    plt.plot(r"C:\\0_PolyU\\test\\a.jpg")
+
+def calDiff(df: pd.DataFrame, diffType: str, accOrEquity : str = "accessibility") -> tuple[pd.DataFrame, list[str]]:
     subdf = df.copy()
+    diff = "Gini_diff" if accOrEquity == "equity" else "diff"
 
     if diffType == "gender":
-        subdf["Male - Female"] = (subdf["A_Male_diff"] / subdf["A_Female_diff"] - 1) * 100
+        subdf["Male - Female"] = (subdf["A_Male_{}".format(diff)] / subdf["A_Female_{}".format(diff)] - 1) * 100
+        # subdf = subdf[(subdf["Male - Female"] > -100) & (subdf["Male - Female"] < 100)]
         subdf.sort_values(by="Male - Female", inplace=True)
         x = ["Male - Female"]
 
@@ -68,7 +87,8 @@ def calDiff(df: pd.DataFrame, diffType: str) -> tuple[pd.DataFrame, list[str]]:
         x = []
         for col in ["children", "young", "elderly"]: # "A_children"
             result = "Milddle - {}".format(col.capitalize())
-            subdf[result] = (subdf["A_middle_diff"] / subdf["A_{}_diff".format(col)] - 1) * 100
+            subdf[result] = (subdf["A_middle_{}".format(diff)] / subdf["A_{}_{}".format(col, diff)] - 1) * 100
+            # subdf = subdf[(subdf[result] > -100) & (subdf[result] < 100)]
             x.append(result)
             
     elif diffType == "evcs":
@@ -82,4 +102,4 @@ def calDiff(df: pd.DataFrame, diffType: str) -> tuple[pd.DataFrame, list[str]]:
     return subdf, x
 
 if __name__ == "__main__":
-    demograpicDiff(r"C:\\0_PolyU\\test\\iso3.csv", "gender")
+    demograpicDiff(r"C:\\0_PolyU\\test\\iso3.csv", "gender", "equity")

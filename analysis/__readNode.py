@@ -13,6 +13,7 @@ def readNode(path: str | tuple[str, str], minEvcsNum: int = 10, ignoreUneffected
     nc = len(uniqueCountries)
     print(f"The total num is {n}, with {nc} countries.")
 
+    # Filter by minimum EVCS number
     if minEvcsNum > 0:
         group = df.groupby("iso3")["EVCSNum"].sum()
         uniqueCountries = group[group >= minEvcsNum].index.unique()

@@ -21,7 +21,7 @@ NODES_ATTR_POP = [
     "population_All", "otherRaster_landscan_global_2024"
 ]
 NODES_ATTR_POI = [
-    "POI_1Num", "POI_2Num", "POI_3Num"
+    "POI_1Num", "POI_2Num", "POI_3Num", "POI_POIAll"
 ]
 EDGES_ATTR = [
     "length", "geometry"
@@ -47,11 +47,13 @@ class M2SFCA:
         self.quit = False
         nodes = gpd.read_file(file, layer="nodes", encoding="utf-8").set_index("osmid")
         # Stop calculating when do not have evcs data
-        for i in ["EVCSNum", "EVCSNum_After"]:
-            if i not in nodes.columns:
-                self.quit = True
-                return
-        
+        if "EVCSNum" not in nodes.columns or "EVCSNum_After" not in nodes.columns:
+            self.quit = True
+            return
+        # Calculate POI_All
+        if "POI_POIAll" not in nodes.columns:
+            nodes["POI_POIAll"] = nodes[["POI_1Num", "POI_2Num", "POI_3Num"]].sum(axis=1)
+
         # Stop calculating when do not have demand data
         demand = []
         for i in demandCol:
@@ -262,4 +264,4 @@ if __name__ == "__main__":
     # a = M2SFCA(r"C:\0_PolyU\roadsGraph_BeijinInner\CHN.gpkg")
     # a.calOneLayer(1000, "Gaussian", "population_All") # type: ignore
     # a.calOneLayer(1000, "Gaussian", "population_All", after=True, maxThreads=os.cpu_count()) # type: ignore
-    calAllLayer(r"C:\\0_PolyU\\roadsGraph", 1000, "Gaussian", maxThread=4)
+    calAllLayer(r"C:\\0_PolyU\\roadsGraph", 1000, "Gaussian", col=["population_All", "POI_POIAll"], maxThread=4)
