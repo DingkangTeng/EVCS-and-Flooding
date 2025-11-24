@@ -9,40 +9,66 @@ from _plot import plotSet, plt
 from analysis.__readNode import readNode
 from analysis import A_POI, A_POP
 
-def EVCSAnalysis(path: str, minEvcsNum: int = 10) -> None:
+def EVCSAnalysis(path: str, minEvcsNum: int = 10, n_bins: int = 10) -> None:
     df, n, nc = readNode(path, minEvcsNum, ignoreUneffected=True)
     df = df[df["EVCSNum"] != 0] if "city" in path else df
     idx = "city" if "city" in path else "iso3"
 
     plotSet()
 
-    # General condition
-    fig, ax = plt.figure("D")
-    df[["EVCSNum", "EVCSNum_After"]].plot.box(
-        ax = ax,
-        showfliers = False,
-        showmeans = True,
-        meanprops = {"markerfacecolor":"lightgreen"}
-    )
-    plt.plot()
-    plt.close()
-
     # Change in percentage
     df["EVCSChange"] = df["EVCSNum_After"] / df["EVCSNum"] * 100 - 100
     df.sort_values(by="EVCSChange", inplace=True)
-    print(df.shape[0])
-    print(df[df["EVCSChange"] == -100].shape[0])
-    print(df[df["EVCSChange"] == 0].shape[0])
+    print(f"The total nunmber of {path} is {n}")
+    print(f"There are {df[df["EVCSChange"] == -100].shape[0]} cities/countries' EVCS are all affected by the flooding")
+    print(f"There are {df[df["EVCSChange"] == 0].shape[0]} cities/countries' EVCS receive no affection from flooding.")
     fig, ax = plt.figure("D")
 
-    cleandf = df[df["EVCSChange"] != 0]
-    sns.histplot(data=cleandf, x="EVCSChange", bins=50, kde=True, 
-             color='skyblue', alpha=0.7, edgecolor='white', linewidth=0.5, ax=ax)
+    # Save results
+    df[[idx, "EVCSChange"]].to_csv(
+        os.path.join(os.path.dirname(path), "{}_EVCS_results.csv".format(os.path.basename(path).split('.')[0])),
+        encoding="utf-8",
+        index=False
+    )
+
+    # Custom bins
+    neg_min = np.floor(df["EVCSChange"].min() / 10) * 10
+    bins = np.linspace(neg_min, 0, n_bins+1)
+    evcsMax = df["EVCSChange"].max()
+    if evcsMax >= 0:
+        bins = np.append(bins, abs(bins[-2]))
+
+    # Hist
+    sns.histplot(
+        data=df, x="EVCSChange",
+        ax=ax,
+        bins=bins,
+        kde=False,
+        color='skyblue', edgecolor='white',
+        linewidth=0.5,
+        stat="probability"
+    )
     
-    # 5. 添加均值和百分位数线
-    mean_val = cleandf["EVCSChange"].mean()
-    p25 = cleandf["EVCSChange"].quantile(0.25)
-    p75 = cleandf["EVCSChange"].quantile(0.75)
+    # Kernel Density Estimate
+    ax2 = ax.twinx()
+    sns.kdeplot(
+        data=df, x="EVCSChange",
+        ax=ax2, 
+        color='orange',
+        linewidth=1
+    )
+
+    # Set main and twin y ticks
+    y1 = ax.get_yticks()
+    ax.set_yticks(y1)
+    y2Min, y2Max = ax2.get_ylim()
+    ax2.set_yticks(np.linspace(y2Min, y2Max, len(y1)))
+    ax2.grid(False)
+    
+    # Add mean and percentile lines
+    mean_val = df["EVCSChange"].mean()
+    p25 = df["EVCSChange"].quantile(0.25)
+    p75 = df["EVCSChange"].quantile(0.75)
 
     ax.axvline(mean_val, color='red', linestyle='--', linewidth=2, label=f'mean: {mean_val:.3f}')
     ax.axvline(p25, color='orange', linestyle=':', linewidth=1.5, alpha=0.8, label=f'25%: {p25:.3f}')
@@ -67,4 +93,4 @@ def EVCSAnalysis(path: str, minEvcsNum: int = 10) -> None:
 # Debug
 if __name__ == "__main__":
     EVCSAnalysis(r"C:\\0_PolyU\\test\\city.csv")
-    # EVCSAnalysis(r"C:\\0_PolyU\\test\\iso3.csv")
+    EVCSAnalysis(r"C:\\0_PolyU\\test\\iso3.csv")

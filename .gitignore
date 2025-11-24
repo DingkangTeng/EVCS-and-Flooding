@@ -1,15 +1,6 @@
 *.code-workspace
 __pycache__
 apiKey.py
-country.js
-test
-TestData
-.backups
-*.gdb
-GpMessages
-ImportLog
-Index
-*.aprx
-cache
-*copy.py
+_GISAnalysis
+*copy*
 FCA-package
