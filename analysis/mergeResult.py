@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 sys.path.append(".") # Set path to the roots
 
-from function.readFiles import loadJsonRecord
+from _function.readFiles import loadJsonRecord
 
 class mergeData:
     __slots__ = ["roadsPath", "countries", "boundary"]

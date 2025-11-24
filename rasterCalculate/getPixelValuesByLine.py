@@ -6,7 +6,7 @@ from rasterio.features import rasterize
 
 sys.path.append(".") # Set path to the roots
 
-from function.rasterFunction import getRasterByRectangleBoundary
+from _function.rasterFunction import getRasterByRectangleBoundary
 
 def getPixelValuesByLine(line: BaseGeometry, raster: str, rasterBounds: BoundingBox) -> np.ndarray:
     XMin, YMin, XMax, YMax = line.bounds

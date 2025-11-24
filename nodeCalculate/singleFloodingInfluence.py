@@ -8,8 +8,8 @@ from typing import override
 
 sys.path.append(".") # Set path to the roots
 
-from function.readFiles import readFiles, loadJsonRecord
-from nodeAnalysis.sumFloodingInfluence import allFloodingInfluence
+from _function.readFiles import readFiles, loadJsonRecord
+from nodeCalculate.sumFloodingInfluence import allFloodingInfluence
 from raster.initRaster import initRaster
 
 SPECIAL_REGION_DICT = {

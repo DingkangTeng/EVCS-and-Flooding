@@ -6,8 +6,8 @@ from bs4 import Tag
 
 sys.path.append(".") # Set path to the roots
 
-from crawlerF.crawler import crawler
-from function.readFiles import mkdir, readFiles
+from crawler.basicCrawler import crawler
+from _function.readFiles import mkdir, readFiles
 
 class globalPopulation(crawler):
     __url = "https://hub.worldpop.org/ajax/geolisting/category?id=88"

@@ -5,7 +5,7 @@ from tqdm import tqdm
 from retry import retry
 
 sys.path.append(".") # Set path to the roots
-from crawlerF.apiKey import HEADERS, MB
+from crawler.apiKey import HEADERS, MB
 
 class crawler:
     __slots__ = ["url", "postData"]

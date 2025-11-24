@@ -9,8 +9,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 sys.path.append(".") # Set path to the roots
 
-from function.readFiles import readFiles, loadJsonRecord
-from function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
+from _function.readFiles import readFiles, loadJsonRecord
+from _function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
 
 NODES_ATTR = [
         "x", "y", "geometry", "EVCSNum", "EVCSNum_After"

@@ -3,9 +3,9 @@ from tqdm import tqdm
 
 sys.path.append(".") # Set path to the roots
 
-from crawlerF.crawler import crawler
-from function.constant import COUNTRIES_GFD
-from function.readFiles import mkdir
+from crawler.basicCrawler import crawler
+from _function.constant import COUNTRIES_GFD
+from _function.readFiles import mkdir
 
 class globalFloodDatabase(crawler):
     __url = "https://global-flood-database.cloudtostreet.ai/"

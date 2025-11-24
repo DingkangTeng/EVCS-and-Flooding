@@ -9,8 +9,8 @@ from shapely.geometry.base import BaseGeometry
 
 sys.path.append(".") # Set path to the roots
 
-from function.readFiles import readFiles, loadJsonRecord
-from function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
+from _function.readFiles import readFiles, loadJsonRecord
+from _function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
 from raster.initRaster import initRaster
 from raster.getPixelValuesByLine import getPixelValuesByLine
 

@@ -12,9 +12,9 @@ from rasterio.mask import mask
 
 sys.path.append(".") # Set path to the roots
 
-from function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
-from function.readFiles import readFiles, loadJsonRecord, mkdir
-from function.constant import GiB
+from _function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
+from _function.readFiles import readFiles, loadJsonRecord, mkdir
+from _function.constant import GiB
 
 class linkNodeWithSumOfRaster:
     __slots__ = ["BLOCK_SIZE_INIT", "THREAD_NUM", "lock"]

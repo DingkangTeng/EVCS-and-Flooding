@@ -15,7 +15,7 @@ from shapely.ops import split
 
 sys.path.append(".") # Set path to the roots
 
-from function.readFiles import readFiles, mkdir
+from _function.readFiles import readFiles, mkdir
 
 class getSimpleRoad:
     __slots__ = ["subThreadSize", "__maxThread"]

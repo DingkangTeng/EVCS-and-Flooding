@@ -6,8 +6,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 
 sys.path.append(".") # Set path to the roots
 
-from function.sqlite import spatialiteConnection, FID_INDEX, modifyTable
-from function.readFiles import readFiles, loadJsonRecord
+from _function.sqlite import spatialiteConnection, FID_INDEX, modifyTable
+from _function.readFiles import readFiles, loadJsonRecord
 
 class calculateRoadLength:
     
