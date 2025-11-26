@@ -7,13 +7,13 @@ from tqdm import tqdm
 sys.path.append(".") # Set path to the roots
 
 from analysis.__readNode import readNode
-from analysis import A, POP_DICT
+from analysis.__setting import A, POP_DICT
 
 class calUpperLevel:
     __slots__ = ["df", "n", "nc", "savePath"]
     
     def __init__(self, path: str, savePath: str, minEvcsNum: int = 0) -> None:
-        self.df, self.n, self.nc = readNode(path, minEvcsNum, ignoreUneffected=True)
+        self.df, self.n, self.nc = readNode(path, minEvcsNum)
         self.savePath = savePath
         columns = self.df.columns
 

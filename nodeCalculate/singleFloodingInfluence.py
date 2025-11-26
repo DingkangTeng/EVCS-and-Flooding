@@ -10,7 +10,7 @@ sys.path.append(".") # Set path to the roots
 
 from _function.readFiles import readFiles, loadJsonRecord
 from nodeCalculate.sumFloodingInfluence import allFloodingInfluence
-from raster.initRaster import initRaster
+from rasterCalculate.initRaster import initRaster
 
 SPECIAL_REGION_DICT = {
     # "GIB": "ESP"  

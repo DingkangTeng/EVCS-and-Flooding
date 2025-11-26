@@ -11,8 +11,8 @@ sys.path.append(".") # Set path to the roots
 
 from _function.readFiles import readFiles, loadJsonRecord
 from _function.sqlite import spatialiteConnection, modifyTable, FID_INDEX
-from raster.initRaster import initRaster
-from raster.getPixelValuesByLine import getPixelValuesByLine
+from rasterCalculate.initRaster import initRaster
+from rasterCalculate.getPixelValuesByLine import getPixelValuesByLine
 
 # Already use window in getMaxPixelsValues, do not need extra memory management when executing
 class allFloodingInfluence:

@@ -5,20 +5,15 @@ import seaborn as sns
 
 sys.path.append(".") # Set path to the roots
 
-from _plot import plotSet, plt
+from _plot import plt, BAR_COLORS
 from analysis.__readNode import readNode
-from analysis import A_POI, A_POP
 
-def EVCSAnalysis(path: str, minEvcsNum: int = 10, n_bins: int = 10) -> None:
-    df, n, nc = readNode(path, minEvcsNum, ignoreUneffected=True)
-    df = df[df["EVCSNum"] != 0] if "city" in path else df
+def EVCSAnalysis(path: str, savePath: str = "", minEvcsNum: int = 10, nBins: int = 10) -> None:
+    df, n, nc = readNode(path, minEvcsNum)
     idx = "city" if "city" in path else "iso3"
-
-    plotSet()
 
     # Change in percentage
     df["EVCSChange"] = df["EVCSNum_After"] / df["EVCSNum"] * 100 - 100
-    df.sort_values(by="EVCSChange", inplace=True)
     print(f"The total nunmber of {path} is {n}")
     print(f"There are {df[df["EVCSChange"] == -100].shape[0]} cities/countries' EVCS are all affected by the flooding")
     print(f"There are {df[df["EVCSChange"] == 0].shape[0]} cities/countries' EVCS receive no affection from flooding.")
@@ -33,7 +28,7 @@ def EVCSAnalysis(path: str, minEvcsNum: int = 10, n_bins: int = 10) -> None:
 
     # Custom bins
     neg_min = np.floor(df["EVCSChange"].min() / 10) * 10
-    bins = np.linspace(neg_min, 0, n_bins+1)
+    bins = np.linspace(neg_min, 0, nBins+1)
     evcsMax = df["EVCSChange"].max()
     if evcsMax >= 0:
         bins = np.append(bins, abs(bins[-2]))
@@ -43,8 +38,7 @@ def EVCSAnalysis(path: str, minEvcsNum: int = 10, n_bins: int = 10) -> None:
         data=df, x="EVCSChange",
         ax=ax,
         bins=bins,
-        kde=False,
-        color='skyblue', edgecolor='white',
+        color=BAR_COLORS[0][0], edgecolor="white",
         linewidth=0.5,
         stat="probability"
     )
@@ -54,7 +48,7 @@ def EVCSAnalysis(path: str, minEvcsNum: int = 10, n_bins: int = 10) -> None:
     sns.kdeplot(
         data=df, x="EVCSChange",
         ax=ax2, 
-        color='orange',
+        color=BAR_COLORS[0][1],
         linewidth=1
     )
 
@@ -67,30 +61,16 @@ def EVCSAnalysis(path: str, minEvcsNum: int = 10, n_bins: int = 10) -> None:
     
     # Add mean and percentile lines
     mean_val = df["EVCSChange"].mean()
-    p25 = df["EVCSChange"].quantile(0.25)
-    p75 = df["EVCSChange"].quantile(0.75)
+    p50 = df["EVCSChange"].quantile(0.5)
 
-    ax.axvline(mean_val, color='red', linestyle='--', linewidth=2, label=f'mean: {mean_val:.3f}')
-    ax.axvline(p25, color='orange', linestyle=':', linewidth=1.5, alpha=0.8, label=f'25%: {p25:.3f}')
-    ax.axvline(p75, color='orange', linestyle=':', linewidth=1.5, alpha=0.8, label=f'75%: {p75:.3f}')
+    ax.axvline(mean_val, color="red", linestyle='--', linewidth=2, label=f'mean: {mean_val:.4f}')
+    ax.axvline(p50, color="orange", linestyle=':', linewidth=1.5, alpha=0.8, label=f'50%: {p50:.4f}')
 
-    # sns.violinplot(
-    #     data=cleandf,
-    #     x = "iso3",
-    #     y = "EVCSChange",
-    #     ax=ax,
-    #     split=True
-    # )
-    # plt.barh(
-    #     y = range(cleandf.shape[0]),
-    #     width= cleandf["EVCSChange"],
-    # )
-    plt.plot()
-    plt.close()
+    plt.plot(savePath)
 
     return
 
 # Debug
 if __name__ == "__main__":
-    EVCSAnalysis(r"C:\\0_PolyU\\test\\city.csv")
-    EVCSAnalysis(r"C:\\0_PolyU\\test\\iso3.csv")
+    EVCSAnalysis(r"C:\\0_PolyU\\test\\city.csv", r"")
+    EVCSAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", r"")

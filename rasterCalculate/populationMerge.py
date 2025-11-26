@@ -12,7 +12,7 @@ from osgeo import gdal
 sys.path.append(".") # Set path to the roots
 
 from _function.readFiles import readFiles, mkdir
-from raster.floodingMerge import floodingMerge
+from rasterCalculate.floodingMerge import floodingMerge
 from _function.rasterFunction import gdalDatasets
 
 class populationMerge(floodingMerge):

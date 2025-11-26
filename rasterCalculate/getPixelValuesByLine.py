@@ -37,6 +37,6 @@ def getPixelValuesByLine(line: BaseGeometry, raster: str, rasterBounds: Bounding
 # Debug
 if __name__ == "__main__":
     from shapely.geometry import LineString
-    from raster.initRaster import initRaster
+    from rasterCalculate.initRaster import initRaster
     r = initRaster("D:\\flooding\\SumDays.tif")
     print(getPixelValuesByLine(LineString([(0,0),(1,1),(2,2)]), r.rasterPath, r.bounds))

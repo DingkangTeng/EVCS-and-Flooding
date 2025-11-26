@@ -5,7 +5,7 @@ sys.path.append(".") # Set path to the roots
 
 from analysis.__readNode import readNode
 from _plot import plotSet, plt, BAR_COLORS
-from analysis import A_AFTER, A_BEFORE
+from analysis.__setting import A_AFTER, A_BEFORE
 
 def demograpicDiff(path: str, diffType: str, accOrEquity : str = "accessibility", minEvcsNum: int = 0) -> None:
     plotSet()

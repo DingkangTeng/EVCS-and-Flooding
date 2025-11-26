@@ -115,6 +115,7 @@ class mergeData:
 
         return
 
+# Debug
 if __name__ == "__main__":
     a = mergeData("C:\\0_PolyU\\roadsGraph", (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"), ("iso3_code", "disp_en"))
     a.mergeAll("C:\\0_PolyU")

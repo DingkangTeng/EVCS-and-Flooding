@@ -1,34 +1,59 @@
 __all__ = [
-    "close", "legend", "ticklabel_format",
-    "plot", "figure"
-    ]
+    "legend",
+    "yticks", "xticks", "ticklabel_format",
+    "plot", "figure", "subplot"
+]
 
-import matplotlib.pyplot as __plt
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 
-from .setting import FIG_SIZE
+from .__setting import FIG_SIZE
 
 # plt original function
 from matplotlib.pyplot import (
-    close, legend,
+    legend,
     yticks, xticks, ticklabel_format
 )
 
 # Print or save fig
 def plot(path: str = "", **kwgs) -> None:
-    __plt.tight_layout()
+    plt.tight_layout()
 
     if path == "":
-        __plt.show()
+        plt.show()
     else:
-        __plt.savefig(path, **kwgs)
+        plt.savefig(path, **kwgs)
 
-    return
+    return plt.close()
 
 # Initial fig
 def figure(figsize: str) -> tuple[Figure, Axes]:
-    fig = __plt.figure(figsize=getattr(FIG_SIZE, figsize))
+    fig = plt.figure(figsize=getattr(FIG_SIZE, figsize))
     ax = fig.subplots()
 
     return fig, ax
+
+# Initial subplot in one fig
+class subplot:
+    __slots__ = ["__fig", "__axs"]
+
+    def __init__(self, figsize: str, y: int, x: int, widthRatios: list[int], legend: bool = True) -> None:
+        from matplotlib.gridspec import GridSpec
+
+        self.__fig = plt.figure(figsize=getattr(FIG_SIZE, figsize))
+        if legend:
+            heightRatios = [max(1, 8//y)] * y + [1]
+            gs = GridSpec(y+1, x, height_ratios=heightRatios, width_ratios=widthRatios)
+        else:
+            gs = GridSpec(y, x, width_ratios=widthRatios)
+
+        self.__axs: list[Axes] = [plt.subplot(gs[i, j]) for i in range(y) for j in range(x)]
+
+    @property
+    def fig(self) -> Figure:
+        return self.__fig
+    
+    @property
+    def axs(self) -> list[Axes]:
+        return self.__axs
