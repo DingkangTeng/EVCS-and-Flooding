@@ -41,7 +41,11 @@ def aggerateAnalysis(
         A_AFTER = ["{}_Gini".format(x) for x in A_AFTER]
 
     df, n, nc = readNode(path, minEvcsNum)
-    df = df[A_BEFORE + A_AFTER + ["iso3"]]
+    scale = os.path.basename(path).split('.')[0]
+    addCol = ["iso3", "city"] if scale == "city" else ["iso3"]
+    df = df[A_BEFORE + A_AFTER + addCol]
+    savePath = os.path.join(savePath, analysisType)
+    if not os.path.exists(savePath): os.makedirs(savePath)
 
     ratio = np.ndarray([len(A_BEFORE)], dtype=object)
     zeroCounts = np.ndarray([len(A_BEFORE)], dtype=np.uint16)
@@ -67,6 +71,8 @@ def aggerateAnalysis(
         zeroCounts[i] = zeroCount
         nonZeroCounts[i] = allRecord.shape[0] - zeroCount
     
+    # Save change ratio
+    df.to_csv(os.path.join(savePath, f"{scale}_{accOrEquity}_results.csv"))
     # Plot
     subplot = plt.subplot("D", 1, 2, [1, 4])
     ax1 = subplot.axs[1]
@@ -107,15 +113,15 @@ def aggerateAnalysis(
 
     subplot.fig.legend(loc="lower center", ncol=2)
 
-    plt.plot()
+    plt.plot(os.path.join(savePath, f"{scale}_{accOrEquity}.jpg"))
 
     # Wilcoxon
     wilcoxon = Wilcoxon(ratio, df, f"{analysisType} {accOrEquity}")
-    # if savePath != "":
-    #     wilcoxon.to_csv(
-    #         os.path.join(savePath, f"{analysisType}_{accOrEquity}.csv"),
-    #         encoding="utf-8", index=False
-    #     )
+    if savePath != "":
+        wilcoxon.to_csv(
+            os.path.join(savePath, f"{scale}_{accOrEquity}_wilcoxon.csv"),
+            encoding="utf-8", index=False
+        )
 
     return
 

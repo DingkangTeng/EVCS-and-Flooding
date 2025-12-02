@@ -223,7 +223,7 @@ class getSimpleRoad:
         edges = []
         nodeIDs: list[int] = [0]
 
-        for idx, row in gdf.iterrows():
+        for _, row in gdf.iterrows():
             lines = row["geometry"]
             attrs = row.drop("geometry").to_dict()
             if isinstance(lines, MultiLineString):
@@ -361,5 +361,3 @@ if __name__ == "__main__":
 
     # Filter for bridges and tunnel for the origional data cleaning in China
     ## other_tags LIKE '%"bridge"=>"yes"%' Or other_tags LIKE '%"layer"=>"-1"%' Or other_tags LIKE '%"layer"=>"1"%' Or z_order >= 9
-
-    # Results have problem with road lenght, run calculateRoadLength after
