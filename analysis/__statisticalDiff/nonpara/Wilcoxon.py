@@ -3,8 +3,11 @@ import numpy as np
 import scipy.stats as stats
 
 # Wilcoxon signed-rank test
-def Wilcoxon(compareCol: list[str] | np.ndarray, df: pd.DataFrame, yName: str = "value") -> pd.DataFrame:
-    print(f"\nWilcoxon signed-rank test on {yName}:")
+def Wilcoxon(
+    compareCol: list[str] | np.ndarray, df: pd.DataFrame, yName: str = "value",
+    savePath: str = "", show: bool = False
+) -> pd.DataFrame:
+    if savePath == "" or show: print(f"\nWilcoxon signed-rank test on {yName}:")
 
     wilcoxon = []
     for i, group1 in enumerate(compareCol):
@@ -32,6 +35,13 @@ def Wilcoxon(compareCol: list[str] | np.ndarray, df: pd.DataFrame, yName: str = 
             })
 
     wilcoxon = pd.DataFrame(wilcoxon)
-    print(wilcoxon, "\n\nSignif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1 \n")
+
+    if savePath != "":
+        wilcoxon.to_csv(savePath, index=False, encoding="utf-8")
+        with open(savePath, 'a', encoding="utf-8") as f:
+            f.write("\n\nSignif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1")
+    
+    elif show:
+        print(wilcoxon, "\n\nSignif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1 \n")
 
     return wilcoxon

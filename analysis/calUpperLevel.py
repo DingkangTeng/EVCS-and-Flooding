@@ -12,8 +12,8 @@ from analysis.__setting import A, POP_DICT
 class calUpperLevel:
     __slots__ = ["df", "n", "nc", "savePath"]
     
-    def __init__(self, path: str, savePath: str, minEvcsNum: int = 0) -> None:
-        self.df, self.n, self.nc = readNode(path, minEvcsNum)
+    def __init__(self, path: str, savePath: str, minEvcsNum: int = 10, filterBy: str = "city") -> None:
+        self.df, self.n, self.nc = readNode(path, minEvcsNum, filterBy, ignoreUneffected=True, ignoreIsolate=False)
         self.savePath = savePath
         columns = self.df.columns
 
@@ -121,6 +121,6 @@ class calUpperLevel:
         return 1 - np.trapezoid(cumAcc, cumPop)
 
 if __name__ == "__main__":
-    a = calUpperLevel(r"C:\\0_PolyU\\merge.parquet", r"C:\\0_PolyU\\test", 10)
+    a = calUpperLevel(r"C:\\0_PolyU\\merge.parquet", r"C:\\0_PolyU\\test", 10, "city")
     a.agg("city", 16)
     a.agg("iso3", 16)

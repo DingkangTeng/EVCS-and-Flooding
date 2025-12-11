@@ -8,7 +8,7 @@ sys.path.append(".") # Set path to the roots
 from _plot import plt, BAR_COLORS
 from analysis.__readNode import readNode
 
-def EVCSAnalysis(path: str, savePath: str = "", minEvcsNum: int = 10, nBins: int = 10) -> None:
+def EVCSAnalysis(path: str, savePath: str = "", minEvcsNum: int = 0, nBins: int = 10) -> None:
     df, n, nc = readNode(path, minEvcsNum)
     idx = "city" if "city" in path else "iso3"
 

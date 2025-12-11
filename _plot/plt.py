@@ -1,12 +1,14 @@
 __all__ = [
     "legend",
     "yticks", "xticks", "ticklabel_format",
-    "plot", "figure", "subplot"
+    "plot", "figure", "subplot",
+    "standAxisName"
 ]
 
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
+from matplotlib.text import Text
 
 from .__setting import FIG_SIZE
 
@@ -57,3 +59,20 @@ class subplot:
     @property
     def axs(self) -> list[Axes]:
         return self.__axs
+    
+# Change axis name
+def standAxisName(ax: Axes, axis: str, standard: dict) -> None:
+    def getlist(fun: list[Text]) -> list[str]:
+        return [standard.get(tick.get_text(), tick.get_text()).capitalize() for tick in fun]
+    
+    if axis == "x":
+        ax.set_xticks(ax.get_xticks())
+        ax.set_xticklabels(
+            getlist(ax.get_xticklabels())
+        )
+
+    elif axis == "y":
+        ax.set_yticks(ax.get_yticks())
+        ax.set_yticklabels(
+            getlist(ax.get_yticklabels())
+        )

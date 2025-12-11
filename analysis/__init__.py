@@ -1,4 +1,4 @@
 from .mergeResult import mergeData
 from .calUpperLevel import calUpperLevel
-from .popAndPOIAnalysis import aggerateAnalysis
+from .popAndPOIAnalysis import popAndPOIAnalysis
 from .demograpicDiff import demograpicDiff

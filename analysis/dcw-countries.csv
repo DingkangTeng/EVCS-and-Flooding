@@ -1,0 +1,251 @@
+continent,iso2,country,iso3
+Africa,AO,Angola,AGO
+Africa,BF,Burkina,BFA
+Africa,BI,Burundi,BDI
+Africa,BJ,Benin,BEN
+Africa,BV,Bouvet,BVT
+Africa,BW,Botswana,BWA
+Africa,CD,Democratic,COD
+Africa,CF,Central,CAF
+Africa,CG,Congo,COG
+Africa,CI,Côte,CIV
+Africa,CM,Cameroon,CMR
+Africa,CV,Cape,CPV
+Africa,DJ,Djibouti,DJI
+Africa,DZ,Algeria,DZA
+Africa,EG,Egypt,EGY
+Africa,EH,Western,ESH
+Africa,ER,Eritrea,ERI
+Africa,ET,Ethiopia,ETH
+Africa,GA,Gabon,GAB
+Africa,GH,Ghana,GHA
+Africa,GM,Gambia,GMB
+Africa,GN,Guinea,GIN
+Africa,GQ,Equatorial,GNQ
+Africa,GW,Guinea-Bissau,GNB
+Africa,KE,Kenya,KEN
+Africa,KM,Comoros,COM
+Africa,LR,Liberia,LBR
+Africa,LS,Lesotho,LSO
+Africa,LY,Libya,LBY
+Africa,MA,Morocco,MAR
+Africa,MG,Madagascar,MDG
+Africa,ML,Mali,MLI
+Africa,MR,Mauritania,MRT
+Africa,MU,Mauritius,MUS
+Africa,MW,Malawi,MWI
+Africa,MZ,Mozambique,MOZ
+Africa,NA,Namibia,NAM
+Africa,NE,Niger,NER
+Africa,NG,Nigeria,NGA
+Africa,RE,Réunion,REU
+Africa,RW,Rwanda,RWA
+Africa,SC,Seychelles,SYC
+Africa,SD,Sudan,SDN
+Africa,SH,Saint,SHN
+Africa,SL,Sierra,SLE
+Africa,SN,Senegal,SEN
+Africa,SO,Somalia,SOM
+Africa,SS,South,SSD
+Africa,ST,Sao,STP
+Africa,SZ,Swaziland,SWZ
+Africa,TD,Chad,TCD
+Africa,TF,French,ATF
+Africa,TG,Togo,TGO
+Africa,TN,Tunisia,TUN
+Africa,TZ,Tanzania,TZA
+Africa,UG,Uganda,UGA
+Africa,YT,Mayotte,MYT
+Africa,ZA,South,ZAF
+Africa,ZM,Zambia,ZMB
+Africa,ZW,Zimbabwe,ZWE
+Antarctica,AQ,Antarctica,ATA
+Asia,AE,United,ARE
+Asia,AF,Afghanistan,AFG
+Asia,AM,Armenia,ARM
+Asia,AZ,Azerbaijan,AZE
+Asia,BD,Bangladesh,BGD
+Asia,BH,Bahrain,BHR
+Asia,BN,Brunei,BRN
+Asia,BT,Bhutan,BTN
+Asia,CN,China,CHN
+Asia,CX,Christmas,CXR
+Asia,GE,Georgia,GEO
+Asia,HK,Hong,HKG
+Asia,HM,Heard,HMD
+Asia,ID,Indonesia,IDN
+Asia,IL,Israel,ISR
+Asia,IN,India,IND
+Asia,IO,British,IOT
+Asia,IQ,Iraq,IRQ
+Asia,IR,Iran,IRN
+Asia,JO,Jordan,JOR
+Asia,JP,Japan,JPN
+Asia,KG,Kyrgyzstan,KGZ
+Asia,KH,Cambodia,KHM
+Asia,KP,Democratic,PRK
+Asia,KR,Republic,KOR
+Asia,KW,Kuwait,KWT
+Asia,KZ,Kazakhstan,KAZ
+Asia,LA,Lao,LAO
+Asia,LB,Lebanon,LBN
+Asia,LK,Sri,LKA
+Asia,MM,Myanmar,MMR
+Asia,MN,Mongolia,MNG
+Asia,MO,Macao,MAC
+Asia,MV,Maldives,MDV
+Asia,MY,Malaysia,MYS
+Asia,NP,Nepal,NPL
+Asia,OM,Oman,OMN
+Asia,PH,Philippines,PHL
+Asia,PK,Pakistan,PAK
+Asia,PS,Palestine,PSE
+Asia,QA,Qatar,QAT
+Asia,RU,Russian,RUS
+Asia,SA,Saudi,SAU
+Asia,SG,Singapore,SGP
+Asia,SY,Syria,SYR
+Asia,TH,Thailand,THA
+Asia,TJ,Tajikistan,TJK
+Asia,TL,Timor-Leste,TLS
+Asia,TM,Turkmenistan,TKM
+Asia,TR,Turkey,TUR
+Asia,TW,Taiwan,TWN
+Asia,UA,Ukraine,UKR
+Asia,UZ,Uzbekistan,UZB
+Asia,VN,Viet,VNM
+Asia,YE,Yemen,YEM
+Europe,AD,Andorra,AND
+Europe,AL,Albania,ALB
+Europe,AT,Austria,AUT
+Europe,AX,Åland,ALA
+Europe,BA,Bosnia,BIH
+Europe,BE,Belgium,BEL
+Europe,BG,Bulgaria,BGR
+Europe,BY,Belarus,BLR
+Europe,CH,Switzerland,CHE
+Europe,CY,Cyprus,CYP
+Europe,CZ,Czech,CZE
+Europe,DE,Germany,DEU
+Europe,DK,Denmark,DNK
+Europe,EE,Estonia,EST
+Europe,ES,Spain,ESP
+Europe,FI,Finland,FIN
+Europe,FO,Faroe,FRO
+Europe,FR,France,FRA
+Europe,GB,United,GBR
+Europe,GG,Guernsey,GGY
+Europe,GI,Gibraltar,GIB
+Europe,GL,Greenland,GRL
+Europe,GR,Greece,GRC
+Europe,HR,Croatia,HRV
+Europe,HU,Hungary,HUN
+Europe,IE,Ireland,IRL
+Europe,IM,Isle,IMN
+Europe,IS,Iceland,ISL
+Europe,IT,Italy,ITA
+Europe,JE,Jersey,JEY
+Europe,LI,Liechtenstein,LIE
+Europe,LT,Lithuania,LTU
+Europe,LU,Luxembourg,LUX
+Europe,LV,Latvia,LVA
+Europe,MC,Monaco,MCO
+Europe,MD,Moldova,MDA
+Europe,ME,Montenegro,MNE
+Europe,MK,Macedonia,MKD
+Europe,MT,Malta,MLT
+Europe,NL,Netherlands,NLD
+Europe,NO,Norway,NOR
+Europe,PL,Poland,POL
+Europe,PT,Portugal,PRT
+Europe,RO,Romania,ROU
+Europe,RS,Serbia,SRB
+Europe,SE,Sweden,SWE
+Europe,SI,Slovenia,SVN
+Europe,SJ,Svalbard,SJM
+Europe,SK,Slovakia,SVK
+Europe,SM,San,SMR
+Europe,VA,Holy,VAT
+Europe,XK,Kosovo,XKX
+North America,CA,Canada,CAN
+North America,MX,Mexico,MEX
+North America,US,United,USA
+Oceania,AS,American,ASM
+Oceania,AU,Australia,AUS
+Oceania,CC,Cocos,CCK
+Oceania,CK,Cook,COK
+Oceania,FJ,Fiji,FJI
+Oceania,FM,Micronesia,FSM
+Oceania,GU,Guam,GUM
+Oceania,KI,Kiribati,KIR
+Oceania,MH,Marshall,MHL
+Oceania,MP,Mariana,MNP
+Oceania,NC,New,NCL
+Oceania,NF,Norfolk,NFK
+Oceania,NR,Nauru,NRU
+Oceania,NU,Niue,NIU
+Oceania,NZ,New,NZL
+Oceania,PF,French,PYF
+Oceania,PG,Papua,PNG
+Oceania,PN,Pitcairn,PCN
+Oceania,PW,Palau,PLW
+Oceania,SB,Solomon,SLB
+Oceania,TK,Tokelau,TKL
+Oceania,TO,Tonga,TON
+Oceania,TV,Tuvalu,TUV
+Oceania,UM,United,UMI
+Oceania,VU,Vanuatu,VUT
+Oceania,WF,Wallis,WLF
+Oceania,WS,Samoa,WSM
+South America,AG,Antigua,ATG
+South America,AI,Anguilla,AIA
+South America,AR,Argentina,ARG
+South America,AW,Aruba,ABW
+South America,BB,Barbados,BRB
+South America,BL,Saint,BLM
+South America,BM,Bermuda,BMU
+South America,BO,Bolivia,BOL
+South America,BQ,"Bonaire,",BES
+South America,BR,Brazil,BRA
+South America,BS,Bahamas,BHS
+South America,BZ,Belize,BLZ
+South America,CL,Chile,CHL
+South America,CO,Colombia,COL
+South America,CR,Costa,CRI
+South America,CU,Cuba,CUB
+South America,CW,Curaçao,CUW
+South America,DM,Dominica,DMA
+South America,DO,Dominican,DOM
+South America,EC,Ecuador,ECU
+South America,FK,Falkland,FLK
+South America,GD,Grenada,GRD
+South America,GF,French,GUF
+South America,GP,Guadeloupe,GLP
+South America,GS,South,SGS
+South America,GT,Guatemala,GTM
+South America,GY,Guyana,GUY
+South America,HN,Honduras,HND
+South America,HT,Haiti,HTI
+South America,JM,Jamaica,JAM
+South America,KN,Saint,KNA
+South America,KY,Cayman,CYM
+South America,LC,Saint,LCA
+South America,MF,Saint,MAF
+South America,MQ,Martinique,MTQ
+South America,MS,Montserrat,MSR
+South America,NI,Nicaragua,NIC
+South America,PA,Panama,PAN
+South America,PE,Peru,PER
+South America,PM,Saint,SPM
+South America,PR,Puerto,PRI
+South America,PY,Paraguay,PRY
+South America,SR,Surinam,SUR
+South America,SV,El,SLV
+South America,SX,Sint,SXM
+South America,TC,Turks,TCA
+South America,TT,Trinidad,TTO
+South America,UY,Uruguay,URY
+South America,VC,Saint,VCT
+South America,VE,Venezuela,VEN
+South America,VG,British,VGB
+South America,VI,Virgin,VIR

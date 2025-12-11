@@ -1,4 +1,5 @@
 from . import plt
+from .__setting import NOTE_SIZE
 
 # Color map
 BAR_COLORS = [

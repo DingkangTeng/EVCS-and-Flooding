@@ -1,18 +1,20 @@
 import sys, os
 import numpy as np
+from matplotlib.axes import Axes
 
 sys.path.append(".") # Set path to the roots
 
-from _plot import plt
+from _plot import plt, BAR_COLORS, NOTE_SIZE
 from analysis.__readNode import readNode
-from analysis.__setting import A_POI, A_POP
+from analysis.__setting import STAND_NAME, AColumns
 from analysis.__statisticalDiff import Wilcoxon
+from analysis.__calRatio import calRatio
 
-def aggerateAnalysis(
+def popAndPOIAnalysis(
     path: str, analysisType: str,
-    savePath: str,
-    accOrEquity : str = "accessibility",
-    minEvcsNum: int = 10
+    savePath: str, axs: Axes | None = None,
+    accOrEquity: str = "accessibility",
+    minEvcsNum: int = 0
 ) -> None:
     """
     Generate ECDF plot.
@@ -24,21 +26,7 @@ def aggerateAnalysis(
         between gender demograph, age demograph and all population. 'popDynamic' analysis the relatiopship
         between all static population and all dynaic population.
     """
-    if analysisType == "POI":
-        A_BEFORE = list(A_POI.before)
-        A_AFTER = list(A_POI.after)
-    elif analysisType == "popStatic":
-        A_BEFORE = list(A_POP.staticBefore)
-        A_AFTER = list(A_POP.staticAfter)
-    elif analysisType == "popDynamic":
-        A_BEFORE = list(A_POP.dynamicBefore)
-        A_AFTER = list(A_POP.dynamicAfter)
-    else:
-        raise RuntimeError("Unsupport analysis type {}.".format(analysisType))
-    
-    if accOrEquity == "equity":
-        A_BEFORE = ["{}_Gini".format(x) for x in A_BEFORE]
-        A_AFTER = ["{}_Gini".format(x) for x in A_AFTER]
+    A_BEFORE, A_AFTER = AColumns(analysisType, accOrEquity)
 
     df, n, nc = readNode(path, minEvcsNum)
     scale = os.path.basename(path).split('.')[0]
@@ -47,45 +35,27 @@ def aggerateAnalysis(
     savePath = os.path.join(savePath, analysisType)
     if not os.path.exists(savePath): os.makedirs(savePath)
 
-    ratio = np.ndarray([len(A_BEFORE)], dtype=object)
-    zeroCounts = np.ndarray([len(A_BEFORE)], dtype=np.uint16)
-    nonZeroCounts = np.ndarray([len(A_BEFORE)], dtype=np.uint16)
-    # results = np.ndarray([len(A_BEFORE)], dtype=pd.DataFrame)
-    for i, a in enumerate(A_BEFORE):
-        col = "{}_changeRatio".format(a)
-        ratio[i] = col
-        df[col] = (df[A_AFTER[i]] / df[a] - 1) * 100
-        allRecord = df[df[col].notna()]
-        affected = allRecord[allRecord[col] != 0]
-        print(
-            f"In {a}, {affected.shape[0]} nodes/region ({affected.shape[0] / allRecord.shape[0] * 100:.2f}%) are affected by flooding."
-        )
-        if accOrEquity == "equity":
-            decrease = df[df[col] > 0].shape[0]
-            print(
-                f"In {a}, {decrease} nodes/region ({decrease / affected.shape[0] * 100:.2f}%) in the affecred nodes have a decrease in equity."
-            )
-
-        # Statistic 0 and non-0
-        zeroCount = (df[col] == 0).sum()
-        zeroCounts[i] = zeroCount
-        nonZeroCounts[i] = allRecord.shape[0] - zeroCount
+    df, ratio, zeroCounts, nonZeroCounts = calRatio(
+        df, A_BEFORE, A_AFTER, True, accOrEquity
+    )
     
     # Save change ratio
+    print("\n")
     df.to_csv(os.path.join(savePath, f"{scale}_{accOrEquity}_results.csv"))
     # Plot
-    subplot = plt.subplot("D", 1, 2, [1, 4])
+    subplot = plt.subplot("W", 1, 2, [1, 4])
     ax1 = subplot.axs[1]
     ax2 = subplot.axs[0]
 
     ## Right: non-0
+    group: str
     for group in ratio:
         groupData = df[group][(df[group] != 0) & df[group].notna()]
         if len(groupData) > 0:
             # ECDF
             x = np.sort(groupData)
             y = np.arange(1, len(x)+1) / len(x)
-            ax1.plot(x, y, label=group, alpha=0.7, linewidth=2)
+            ax1.plot(x, y, label=STAND_NAME.get(group, group).capitalize().replace("\n", " "), alpha=0.7, linewidth=2)
     ax1.set_xlabel("Change Ratio (%)")
     ax1.set_ylabel("Cumulative Probability")
     ax1.yaxis.tick_right()
@@ -99,8 +69,8 @@ def aggerateAnalysis(
     nonZeroPercent = [non_zero / total * 100 for non_zero, total in zip(nonZeroCounts, totalCounts)]
     
     ## Stacked horizontal bar
-    bars1 = ax2.barh(yPos, zeroPercent, height=0.6, label="Zero Values", alpha=0.7)
-    bars2 = ax2.barh(yPos, nonZeroPercent, height=0.6, left=zeroPercent, label="Non-zero Values", alpha=0.7)
+    ax2.barh(yPos, zeroPercent, height=0.6, label="Zero Values", alpha=0.7)
+    ax2.barh(yPos, nonZeroPercent, height=0.6, left=zeroPercent, label="Non-zero Values", alpha=0.7)
     
     ## Label
     for i, (zp, nzp) in enumerate(zip(zeroPercent, nonZeroPercent)):
@@ -111,34 +81,110 @@ def aggerateAnalysis(
     ax2.set_yticklabels(ratio, rotation=45)
     ax2.grid(True, alpha=0.3, axis='x')
 
-    subplot.fig.legend(loc="lower center", ncol=2)
+    subplot.fig.legend(loc="lower center", ncol=4)
+    plt.standAxisName(ax2, 'y', STAND_NAME)
 
     plt.plot(os.path.join(savePath, f"{scale}_{accOrEquity}.jpg"))
 
     # Wilcoxon
-    wilcoxon = Wilcoxon(ratio, df, f"{analysisType} {accOrEquity}")
-    if savePath != "":
-        wilcoxon.to_csv(
-            os.path.join(savePath, f"{scale}_{accOrEquity}_wilcoxon.csv"),
-            encoding="utf-8", index=False
-        )
+    wilcoxon = Wilcoxon(
+        ratio,
+        df,
+        f"{analysisType} {accOrEquity}",
+        os.path.join(savePath, f"{scale}_{accOrEquity}_wilcoxon.csv") if savePath != "" else ""
+    )
+
+    # Draw box plot
+    fig, ax = plt.figure("D") if analysisType != "popDynamic" else plt.figure("SL")
+    import seaborn as sns
+    sns.boxplot(
+        data=df[ratio],
+        ax = ax,
+        showfliers=False,
+        showmeans=True,
+        color=BAR_COLORS[0][0]
+    )
+
+    # Add significance annotations
+    ymin, ymax = ax.get_ylim()
+    startHeight = ymax
+    lineStep = 0.08 * (ymax - ymin)
+    maxHeight = startHeight
+    
+    pairs = {startHeight: (0,0)}
+    for x1, group1 in enumerate(ratio[:-1]):
+        for x2, group2 in enumerate(ratio[x1+1:]):
+            if group1.split("_")[1] in {"children", "young", "middle", "elderly"} \
+                and group2.split("_")[1] in {"Male", "Female"}: continue
+            
+            x2 += (x1 + 1)
+
+            lineHeight = startHeight
+            pairMin, pairMax = pairs[lineHeight]
+            for lineHeight in pairs.keys():
+                pairMin, pairMax = pairs[lineHeight]
+                if (x1 >= pairMin and x1 < pairMax) or (x2 > pairMin and x2 <= pairMax):
+                    lineHeight += lineStep
+                else:
+                    break
+
+            row = wilcoxon[(wilcoxon["group1"] == group1) & (wilcoxon["group2"] == group2)]
+            
+            ## Draw line
+            ax.plot(
+                [x1, x1, x2, x2], 
+                [
+                    lineHeight,
+                    lineHeight + lineStep/3, 
+                    lineHeight + lineStep/3,
+                    lineHeight
+                ],
+                color="#000000",
+                lw=1.5
+            )
+            
+            ## Add text
+            m = row["magnitude"].values[0]
+            e = row["effsize"].values[0]
+            s = row["significance"].values[0]
+            text = f"{e:.4f} ({m})" if m != "negligible" else f"{e:.4f}"
+            if s not in {'', '.'}:
+                text = f"{text}$^{{{s}}}$"
+            ax.text(
+                (x1 + x2) / 2,
+                lineHeight + lineStep/2,
+                text,
+                ha="center", va="bottom",
+                fontsize=NOTE_SIZE,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
+            )
+            
+            ## Save line info
+            if lineHeight not in pairs: pairs[lineHeight] = (x1, x2)
+            else: pairs[lineHeight] = (min(x1, pairMin), max(x2, pairMax))
+            maxHeight = max(maxHeight, lineHeight)
+
+    ax.set_ylim(ymin, maxHeight + lineStep)
+    plt.standAxisName(ax, 'x', STAND_NAME)
+
+    plt.plot(os.path.join(savePath, f"{scale}_{accOrEquity}_boxplot.jpg"))
 
     return
 
 # Debug
 if __name__ == "__main__":
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popStatic", r"C:\\0_PolyU\\test")
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popDynamic", r"C:\\0_PolyU\\test")
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popStatic", r"C:\\0_PolyU\\test")
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popDynamic", r"C:\\0_PolyU\\test")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popStatic", r"C:\\0_PolyU\\test")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popDynamic", r"C:\\0_PolyU\\test")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popStatic", r"C:\\0_PolyU\\test")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popDynamic", r"C:\\0_PolyU\\test")
 
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popStatic", r"C:\\0_PolyU\\test", "equity")
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popDynamic", r"C:\\0_PolyU\\test", "equity")
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popStatic", r"C:\\0_PolyU\\test", "equity")
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popDynamic", r"C:\\0_PolyU\\test", "equity")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popStatic", r"C:\\0_PolyU\\test", accOrEquity="equity")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popDynamic", r"C:\\0_PolyU\\test", accOrEquity="equity")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popStatic", r"C:\\0_PolyU\\test", accOrEquity="equity")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popDynamic", r"C:\\0_PolyU\\test", accOrEquity="equity")
     
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\city.csv", "POI", r"C:\\0_PolyU\\test")
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "POI", r"C:\\0_PolyU\\test")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "POI", r"C:\\0_PolyU\\test")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "POI", r"C:\\0_PolyU\\test")
 
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\city.csv", "POI", r"C:\\0_PolyU\\test", "equity")
-    aggerateAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "POI", r"C:\\0_PolyU\\test", "equity")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "POI", r"C:\\0_PolyU\\test", accOrEquity="equity")
+    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "POI", r"C:\\0_PolyU\\test", accOrEquity="equity")
