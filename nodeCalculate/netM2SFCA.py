@@ -211,7 +211,7 @@ class M2SFCA:
         # Save A
         bar.set_description("Saving result of A in {}".format(fileName))
         aCols = ["A_{}".format(x) for x in cols]
-        resultA = pd.DataFrame.from_dict(A, orient='index', columns=aCols)
+        resultA = pd.DataFrame.from_dict(A, orient="index", columns=aCols)
         resultA["fid"] = resultA.index + 1
         self.updateData(self.file, resultA, aCols)
         bar.update(1)

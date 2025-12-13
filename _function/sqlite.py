@@ -1,5 +1,4 @@
-import sqlite3, time
-import pandas as pd
+import sqlite3
 from typing import Any
 
 FID_INDEX = "idx_fid"
@@ -87,7 +86,7 @@ class modifyTable(sqlite3.Cursor):
                     """
                 )
         
-        conn.execute("VACUUM")
+        self.execute("VACUUM")
 
         return
     
@@ -99,7 +98,7 @@ class modifyTable(sqlite3.Cursor):
         for fieldName in fieldNames:
             if fieldName in columns: self.__dropIndexByList(fieldName, indexes)
         
-        conn.execute("VACUUM")
+        self.execute("VACUUM")
 
         return
     
@@ -120,12 +119,13 @@ class modifyTable(sqlite3.Cursor):
         self.execute(f"DROP TABLE IF EXISTS \"{tableName}\"")
         self.execute(f"DELETE FROM gpkg_contents WHERE table_name = '{tableName}'")
         self.execute(f"DELETE FROM gpkg_geometry_columns WHERE table_name = '{tableName}'")
-        conn.execute("VACUUM")
+        self.execute("VACUUM")
 
         return
 
 # Debug
 if __name__ == "__main__":
+    import os
     import geopandas as gpd
     import readFiles
     from tqdm import tqdm
