@@ -4,18 +4,18 @@ from typing import overload, Literal
 
 @overload
 def calRatio(
-    df: DataFrame, colsBefore: list[str], colsAfter: list[str],
+    df: DataFrame, colsBefore: list[str] | ndarray, colsAfter: list[str] | ndarray,
     seperateZero: Literal[True], accOrEquity: str = ""
 ) -> tuple[DataFrame, ndarray, ndarray, ndarray]: ...
 
 @overload
 def calRatio(
-    df: DataFrame, colsBefore: list[str], colsAfter: list[str],
+    df: DataFrame, colsBefore: list[str] | ndarray, colsAfter: list[str] | ndarray,
     seperateZero: Literal[False] = False, accOrEquity: str = ""
 ) -> tuple[DataFrame, ndarray]: ...
 
 def calRatio(
-    df: DataFrame, colsBefore: list[str], colsAfter: list[str],
+    df: DataFrame, colsBefore: list[str] | ndarray, colsAfter: list[str] | ndarray,
     seperateZero: bool = False, accOrEquity: str = ""
 ) -> tuple[DataFrame, ndarray] | tuple[DataFrame, ndarray, ndarray, ndarray]:
     resultCols = ndarray([len(colsBefore)], dtype=object)

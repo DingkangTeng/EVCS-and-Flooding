@@ -109,7 +109,7 @@ class M2SFCA:
     
     @staticmethod
     def __demandDijkstra(G: nx.MultiDiGraph, node: int, d0: float, decay: str, demandAttrs: list[str], supplyCols: list[str]) -> np.ndarray:
-        result = np.zeros([len(demandAttrs), len(supplyCols)],dtype=np.float32)
+        result = np.zeros([len(demandAttrs), len(supplyCols)],dtype=np.float64)
         # Calculate the accessable demand points from supply node within distance d0
         try:
             paths = nx.single_source_dijkstra_path_length(G, node, cutoff=d0, weight="length")
@@ -152,7 +152,7 @@ class M2SFCA:
         if sum(demandValues) == 0: return None
 
         supplyN = len(supplyCols)
-        result = np.zeros([len(demandAttrs), supplyN],dtype=np.float32)
+        result = np.zeros([len(demandAttrs), supplyN],dtype=np.float64)
 
         # Calculate the accessable supply points from demand node within distance d0
         try:
@@ -264,4 +264,4 @@ if __name__ == "__main__":
     # a = M2SFCA(r"C:\0_PolyU\roadsGraph_BeijinInner\CHN.gpkg")
     # a.calOneLayer(1000, "Gaussian", "population_All") # type: ignore
     # a.calOneLayer(1000, "Gaussian", "population_All", after=True, maxThreads=os.cpu_count()) # type: ignore
-    calAllLayer(r"C:\\0_PolyU\\roadsGraph", 1000, "Gaussian", col=["population_All", "POI_POIAll"], maxThread=4)
+    calAllLayer(r"C:\\0_PolyU\\roadsGraph", 5000, "Gaussian", maxThread=8)

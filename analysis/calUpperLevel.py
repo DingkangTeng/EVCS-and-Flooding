@@ -121,6 +121,6 @@ class calUpperLevel:
         return 1 - np.trapezoid(cumAcc, cumPop)
 
 if __name__ == "__main__":
-    a = calUpperLevel(r"C:\\0_PolyU\\merge.parquet", r"C:\\0_PolyU\\test", 10, "city")
+    a = calUpperLevel(r"C:\\0_PolyU\\test\\merge_5km.parquet", r"C:\\0_PolyU\\test", 10, "city")
     a.agg("city", 16)
     a.agg("iso3", 16)

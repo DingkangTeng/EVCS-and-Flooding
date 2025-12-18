@@ -138,7 +138,7 @@ class accAndEquityAnalysis:
         ax.legend(handles=[trendLine], loc="upper left", bbox_to_anchor=(1.02, 0.44))
         
         ax.set_xlabel("Change in accessibility(%)")
-        ax.set_ylabel("Change in equity (%)")
+        ax.set_ylabel("Change in Gini coefficient (%)")
         
         plt.plot(os.path.join(self.savePath, f"{self.scale}_Acc&EquCompare.jpg"))
         self.outputInformation()

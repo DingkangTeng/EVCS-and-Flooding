@@ -173,18 +173,21 @@ def popAndPOIAnalysis(
 
 # Debug
 if __name__ == "__main__":
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popStatic", r"C:\\0_PolyU\\test")
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popDynamic", r"C:\\0_PolyU\\test")
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popStatic", r"C:\\0_PolyU\\test")
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popDynamic", r"C:\\0_PolyU\\test")
+    root = r"C:\\0_PolyU\\test\\1km"
+    city = os.path.join(root, "city.csv")
+    iso3 = os.path.join(root, "city.csv")
+    popAndPOIAnalysis(city, "popStatic", root)
+    popAndPOIAnalysis(city, "popDynamic", root)
+    popAndPOIAnalysis(iso3, "popStatic", root)
+    popAndPOIAnalysis(iso3, "popDynamic", root)
 
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popStatic", r"C:\\0_PolyU\\test", accOrEquity="equity")
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "popDynamic", r"C:\\0_PolyU\\test", accOrEquity="equity")
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popStatic", r"C:\\0_PolyU\\test", accOrEquity="equity")
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "popDynamic", r"C:\\0_PolyU\\test", accOrEquity="equity")
+    popAndPOIAnalysis(city, "popStatic", root, accOrEquity="equity")
+    popAndPOIAnalysis(city, "popDynamic", root, accOrEquity="equity")
+    popAndPOIAnalysis(iso3, "popStatic", root, accOrEquity="equity")
+    popAndPOIAnalysis(iso3, "popDynamic", root, accOrEquity="equity")
     
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "POI", r"C:\\0_PolyU\\test")
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "POI", r"C:\\0_PolyU\\test")
+    popAndPOIAnalysis(city, "POI", root)
+    popAndPOIAnalysis(iso3, "POI", root)
 
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\city.csv", "POI", r"C:\\0_PolyU\\test", accOrEquity="equity")
-    popAndPOIAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", "POI", r"C:\\0_PolyU\\test", accOrEquity="equity")
+    popAndPOIAnalysis(city, "POI", root, accOrEquity="equity")
+    popAndPOIAnalysis(iso3, "POI", root, accOrEquity="equity")

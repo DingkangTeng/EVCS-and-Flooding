@@ -1,5 +1,4 @@
 import sys, os
-import pandas as pd
 import numpy as np
 import seaborn as sns
 
@@ -8,7 +7,7 @@ sys.path.append(".") # Set path to the roots
 from _plot import plt, BAR_COLORS
 from analysis.__readNode import readNode
 
-def EVCSAnalysis(path: str, savePath: str = "", minEvcsNum: int = 0, nBins: int = 10) -> None:
+def EVCSAndFlooding(path: str, savePath: str = "", minEvcsNum: int = 0, nBins: int = 10) -> None:
     df, n, nc = readNode(path, minEvcsNum)
     idx = "city" if "city" in path else "iso3"
 
@@ -63,14 +62,20 @@ def EVCSAnalysis(path: str, savePath: str = "", minEvcsNum: int = 0, nBins: int 
     mean_val = df["EVCSChange"].mean()
     p50 = df["EVCSChange"].quantile(0.5)
 
-    ax.axvline(mean_val, color="red", linestyle='--', linewidth=2, label=f'mean: {mean_val:.4f}')
-    ax.axvline(p50, color="orange", linestyle=':', linewidth=1.5, alpha=0.8, label=f'50%: {p50:.4f}')
+    ax.axvline(mean_val, color="red", linestyle='--', linewidth=2, label=f'Mean: {mean_val:.4f}')
+    ax.axvline(p50, color="orange", linestyle=':', linewidth=1.5, alpha=0.8, label=f'Median: {p50:.4f}')
+    ax.legend()
 
     plt.plot(savePath)
 
     return
 
+
+
 # Debug
 if __name__ == "__main__":
-    EVCSAnalysis(r"C:\\0_PolyU\\test\\city.csv", r"")
-    EVCSAnalysis(r"C:\\0_PolyU\\test\\iso3.csv", r"")
+    root = r"C:\\0_PolyU\\test\\1km"
+    city = os.path.join(root, "city.csv")
+    iso3 = os.path.join(root, "city.csv")
+    EVCSAndFlooding(city, r"C:\\0_PolyU\\test\\EVCSChange_city.jpg")
+    EVCSAndFlooding(iso3, r"C:\\0_PolyU\\test\\EVCSChange_iso3")
