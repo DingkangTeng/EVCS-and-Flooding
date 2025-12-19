@@ -1,6 +1,8 @@
-import os, sys
+import os, sys, zipfile
 import geopandas as gpd
 import numpy as np
+import rasterio as rio
+from rasterio.merge import merge
 from shapely.geometry.base import BaseGeometry
 from tqdm import tqdm
 
@@ -8,6 +10,7 @@ sys.path.append(".") # Set path to the roots
 
 from _plot import plt, BAR_COLORS
 from analysis.__readNode import readNode
+from _function.readFiles import readFiles
 
 class EVCSIndicator:
     __slots__ = ["df", "savePath"]
@@ -19,7 +22,7 @@ class EVCSIndicator:
         savePath: tuple[str, str],
         minEvcsNum: int = 0
     ) -> None:
-        if os.path.exists(savePath[0]): df = gpd.read_file(savePath[0], layer=savePath[1], encoding="utf-8", index_col="city")
+        if os.path.exists(savePath[0]): df = gpd.read_file(savePath[0], layer=savePath[1], encoding="utf-8").set_index("city")
         else:
             df, _, _ = readNode(result, minEvcsNum)
             # Add EVCS count and geometry
@@ -56,11 +59,9 @@ class EVCSIndicator:
     
     def EVCS(self, evcs: str | tuple[str, str] | gpd.GeoDataFrame) -> None:
         # Add density
-        if "EVCSDensity" not in self.df.columns: self.df["EVCSDensity"] = self.df["EVCSNum"] / self.df["area"]
+        self.df["EVCSDensity"] = self.df["EVCSNum"] / self.df["area"]
 
         # Add coverage
-        if "EVCScoverage" in self.df.columns: return
-
         evcs = self.__readFile(evcs, [])
         self.df["EVCScoverage"] = np.nan
         bar = tqdm(total=self.df.shape[0], desc="Calculating EVCS coverage", unit="city")
@@ -79,17 +80,13 @@ class EVCSIndicator:
             else:
                 evcs = gpd.GeoDataFrame(geometry=[], crs=evcs.crs)
 
-            if len(evcs) < 3: self.df.at[idx, "EVCScoverage"] = 0
+            if len(evcs) == 0: self.df.at[idx, "EVCScoverage"] = 0
             else:
-                # Calculate convex hull
-                points = evcs.geometry.union_all()
-                convexHull = points.convex_hull
-                if convexHull.geom_type not in ["Polygon", "MultiPolygon"]:
-                    self.df.at[idx, "EVCScoverage"] = 0
-                else:
-                    intersection = convexHull.intersection(boundary)
-                    if intersection.is_empty: self.df.at[idx, "EVCScoverage"] = 0
-                    else: self.df.at[idx, "EVCScoverage"] = intersection.area / boundary.area
+                # Calculate dissloved buffer
+                points = evcs.geometry.buffer(0.01).union_all()
+                intersection = points.intersection(boundary)
+                if intersection.is_empty: self.df.at[idx, "EVCScoverage"] = 0
+                else: self.df.at[idx, "EVCScoverage"] = intersection.area / boundary.area
 
             bar.update()
 
@@ -97,9 +94,8 @@ class EVCSIndicator:
         return
     
     def road(self, roadRoot: str) -> None:
-        if "roadDensity" in self.df.columns: return
-
         self.df["roadDensity"] = np.nan
+        self.df["roadCoverage"] = np.nan
         self.df["roadLength"] = np.nan
         iso3 = self.df["iso3"].unique().tolist()
         bar = tqdm(total=self.df.shape[0], desc="Calculating road density", unit="city")
@@ -107,20 +103,27 @@ class EVCSIndicator:
         for country in iso3:
             road = os.path.join(roadRoot, "{}.gpkg".format(country))
             roadDf = self.__readFile((road, "edges"), usecoles=["length"], index=["city"])
+            if roadDf.crs != self.df.crs: roadDf.to_crs(self.df.crs, inplace=True) # type: ignore
             subDf: gpd.GeoDataFrame = self.df.loc[self.df["iso3"] == country]
 
             for row in subDf.itertuples():
                 idx = getattr(row, "Index")
                 area = getattr(row, "area")
-
+                boundary: BaseGeometry = getattr(row, "geometry")
                 roads: gpd.GeoDataFrame = roadDf.loc[idx]
+
                 if roads.shape[0] == 0:
                     self.df.at[idx, "roadDensity"] = 0
+                    self.df.at[idx, "roadCoverage"] = 0
                     self.df.at[idx, "roadLength"] = 0
                 else:
                     length = roads["length"].sum() / 1000
                     self.df.at[idx, "roadLength"] = length
                     self.df.at[idx, "roadDensity"] = length / area
+                    # Coverage
+                    roadsBuffer = roads.geometry.buffer(0.01).union_all()
+                    intersection = roadsBuffer.intersection(boundary)
+                    self.df.at[idx, "roadCoverage"] = intersection.area / boundary.area
                 
                 bar.update()
         
@@ -128,9 +131,41 @@ class EVCSIndicator:
         return
     
     def population(self) -> None:
-        if "populationDensity" in self.df.columns: return
-
+        # Density
         self.df["populationDensity"] = self.df["population_All"] / self.df["area"]
+
+        # Coverage
+        self.df["populationCoverage"] = np.nan
+        iso3 = self.df["iso3"].unique().tolist()
+
+        for country in iso3:
+            subDf: gpd.GeoDataFrame = self.df.loc[self.df["iso3"] == country]
+            ...
+
+        return
+    
+    def flooding(self, floodingBinary: str) -> None:
+        self.df["folldingCoverage"] = np.nan
+
+        flooding = gpd.read_file(floodingBinary, encoding="utf-8")
+        if flooding.crs != self.df.crs: flooding.to_crs(self.df.crs, inplace=True) # type: ignore
+
+        self.df["area_a"] = self.df.area
+        intersection = gpd.overlay(self.df, flooding, how="intersection", keep_geom_type=True)
+        intersection["area_intersection"] = intersection.area
+        
+        # Calculate the intersection area
+        overlap = intersection.groupby(intersection.index).agg({
+            "area_intersection": "sum"
+        })
+        
+        # 合并回原始gdf_a
+        self.df = self.df.merge(overlap, left_index=True, right_index=True, how="left")
+        
+        # 计算重合占比
+        self.df["area_intersection"].fillna(0, inplace=True)
+        self.df["folldingCoverage"] = (self.df["area_intersection"] / self.df["area_a"]) * 100
+        self.df.drop(columns=["area_a", "area_intersection"], inplace=True)
 
         return
     
@@ -149,10 +184,8 @@ if __name__ == "__main__":
     
     a = EVCSIndicator(CITY_RESULT, (GEO_DB, "GAUL_2024_L2"), (r"C:\\0_PolyU\\test\\indicator.gpkg", "city"))
     a.EVCS(EVCS)
-    a.save()
-
     a.road(DOWN_ROAD)
+    # a.population()
+    a.flooding(r"E:\Flooding_Related\flooding\floodingArea.shp")
     a.save()
-
-    a.population()
-    a.save()
+    # print(a.df.columns)

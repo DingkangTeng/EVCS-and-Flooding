@@ -169,7 +169,7 @@ class M2SFCA:
             for j, demandValue in enumerate(demandValues):
                 if demandValue == 0: continue
                 for k in range(supplyN):
-                    result[j][k] += data[2 * j + k] * weightVal * weightVal if isinstance(data, np.ndarray) else 0 # 似乎这个地方改成w^2就可以？
+                    result[j][k] += data[2 * j + k] * weightVal * weightVal if isinstance(data, np.ndarray) else 0
             
         return result.flatten()
     

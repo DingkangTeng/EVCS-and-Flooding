@@ -23,9 +23,9 @@ def sensativeAnalysis(root: str, buffer: list[str], figsize: str = "D") -> None:
     for i, sub in enumerate(buffer):
         path = os.path.join(root, sub, "city.csv")
         subDf, _, _ = readNode(path)
-        subDf = subDf[A_BEFORE.tolist() + A_AFTER.tolist()]
+        subDf = subDf[A_BEFORE.tolist() + A_AFTER.tolist() + ["city"]]
         subDf, ratio = calRatio(subDf, A_BEFORE, A_AFTER)
-        subDf: pd.DataFrame = subDf[ratio.tolist()]
+        subDf: pd.DataFrame = subDf[ratio.tolist() + ["city"]]
         subDf["buffer"] = sub
         allDf[i] = subDf
     
@@ -34,8 +34,9 @@ def sensativeAnalysis(root: str, buffer: list[str], figsize: str = "D") -> None:
     # 使用lineplot，误差显示为带状的置信区间
     fig, ax = plt.figure(figsize)
     for y in ratio:
+        subDf = df#[df[y] != 0]
         sns.lineplot(
-            data=df,
+            data=subDf,
             ax=ax,
             x="buffer", y=y,
             errorbar="ci",    # 或 "se", "ci"
