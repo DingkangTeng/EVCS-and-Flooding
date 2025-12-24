@@ -1,16 +1,23 @@
-import os, sys, zipfile
+import os, sys, warnings
 import geopandas as gpd
 import numpy as np
 import rasterio as rio
-from rasterio.merge import merge
+from rasterio.mask import mask
 from shapely.geometry.base import BaseGeometry
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
 
 sys.path.append(".") # Set path to the roots
 
 from _plot import plt, BAR_COLORS
 from analysis.__readNode import readNode
-from _function.readFiles import readFiles
+
+warnings.filterwarnings(
+    "ignore", 
+    category=UserWarning,
+    message="Geometry is in a geographic CRS.*"
+)
 
 class EVCSIndicator:
     __slots__ = ["df", "savePath"]
@@ -76,14 +83,14 @@ class EVCSIndicator:
             possibleMatchesIdx = list(evcs.sindex.intersection(boundary.bounds))
             if possibleMatchesIdx:
                 possibleMatches = evcs.iloc[np.array(possibleMatchesIdx)]
-                evcs = possibleMatches[possibleMatches.within(boundary)]
+                evcsWithin = possibleMatches[possibleMatches.within(boundary)]
             else:
-                evcs = gpd.GeoDataFrame(geometry=[], crs=evcs.crs)
+                evcsWithin = gpd.GeoDataFrame(geometry=[], crs=evcs.crs)
 
-            if len(evcs) == 0: self.df.at[idx, "EVCScoverage"] = 0
+            if len(evcsWithin) == 0: self.df.at[idx, "EVCScoverage"] = 0
             else:
                 # Calculate dissloved buffer
-                points = evcs.geometry.buffer(0.01).union_all()
+                points = evcsWithin.geometry.buffer(0.01).union_all()
                 intersection = points.intersection(boundary)
                 if intersection.is_empty: self.df.at[idx, "EVCScoverage"] = 0
                 else: self.df.at[idx, "EVCScoverage"] = intersection.area / boundary.area
@@ -98,7 +105,7 @@ class EVCSIndicator:
         self.df["roadCoverage"] = np.nan
         self.df["roadLength"] = np.nan
         iso3 = self.df["iso3"].unique().tolist()
-        bar = tqdm(total=self.df.shape[0], desc="Calculating road density", unit="city")
+        bar = tqdm(total=self.df.shape[0], desc="Calculating road density and coverage", unit="city")
 
         for country in iso3:
             road = os.path.join(roadRoot, "{}.gpkg".format(country))
@@ -130,42 +137,72 @@ class EVCSIndicator:
         bar.close()        
         return
     
-    def population(self) -> None:
+    def population(self, rasterRoot: str, maxThread: int = 1) -> None:
         # Density
         self.df["populationDensity"] = self.df["population_All"] / self.df["area"]
 
         # Coverage
-        self.df["populationCoverage"] = np.nan
+        self.df["populationCV"] = np.nan
         iso3 = self.df["iso3"].unique().tolist()
+        bar = tqdm(total=self.df.shape[0], desc="Calculating population coverage", unit="city")
 
-        for country in iso3:
-            subDf: gpd.GeoDataFrame = self.df.loc[self.df["iso3"] == country]
-            ...
+        futures = []
+        lock = Lock()
+        with ThreadPoolExecutor(max_workers=maxThread) as executor:
+            for country in iso3:
+                subDf: gpd.GeoDataFrame = self.df.loc[self.df["iso3"] == country]
+                raster = os.path.join(rasterRoot, "{}_allGender_allAge_merge.tif".format(country))
+                futures.append(
+                    executor.submit(self.__popCoverage, subDf, raster, lock, bar)
+                )
+
+        return
+    
+    def __popCoverage(self, subDf: gpd.GeoDataFrame, rasterRoot: str, lock: Lock, bar: tqdm) -> None:
+        with rio.open(rasterRoot, options=["NUM_THREADS=ALL_CPUS"]) as pop:
+            for row in subDf.itertuples():
+                idx = getattr(row, "Index")
+                geom = getattr(row, "geometry")
+
+                raster, _ = mask(pop, [geom], crop=True, nodata=pop.nodata, all_touched=True)
+                values: np.ndarray = raster[0].flatten()
+                values = values[values != pop.nodata]
+                values = values[~np.isnan(values)]
+
+                # CV
+                with lock:
+                    if len(values) > 0:
+                        self.df.loc[idx, "populationCV"] = np.std(values) / np.mean(values)
+                    else:
+                        self.df.loc[idx, "populationCV"] = 0
+                    
+                    bar.update()
 
         return
     
     def flooding(self, floodingBinary: str) -> None:
         self.df["folldingCoverage"] = np.nan
+        bar = tqdm(total=self.df.shape[0], desc="Reading flooding area", unit="city")
 
         flooding = gpd.read_file(floodingBinary, encoding="utf-8")
         if flooding.crs != self.df.crs: flooding.to_crs(self.df.crs, inplace=True) # type: ignore
 
-        self.df["area_a"] = self.df.area
-        intersection = gpd.overlay(self.df, flooding, how="intersection", keep_geom_type=True)
-        intersection["area_intersection"] = intersection.area
+        bar.set_description("Calculating flooding coverage")
+
+        for row in self.df.itertuples():
+            idx = getattr(row, "Index")
+            boundary: BaseGeometry = getattr(row, "geometry")
+
+            # Coverage
+            possibleMatchesIdx = list(flooding.sindex.intersection(boundary.bounds))
+            if possibleMatchesIdx:
+                possibleMatches = flooding.iloc[np.array(possibleMatchesIdx)]
+                intersection = possibleMatches.intersection(boundary)
+                self.df.at[idx, "folldingCoverage"] = intersection.union_all().area / boundary.area
+            else:
+                self.df.at[idx, "folldingCoverage"] = 0
         
-        # Calculate the intersection area
-        overlap = intersection.groupby(intersection.index).agg({
-            "area_intersection": "sum"
-        })
-        
-        # 合并回原始gdf_a
-        self.df = self.df.merge(overlap, left_index=True, right_index=True, how="left")
-        
-        # 计算重合占比
-        self.df["area_intersection"].fillna(0, inplace=True)
-        self.df["folldingCoverage"] = (self.df["area_intersection"] / self.df["area_a"]) * 100
-        self.df.drop(columns=["area_a", "area_intersection"], inplace=True)
+            bar.update()
 
         return
     
@@ -181,11 +218,12 @@ if __name__ == "__main__":
     GEO_DB = r"_GISAnalysis\Dissertation.gdb"
     EVCS = (r"C:\0_PolyU\global_EVCS.gpkg", "evcs")
     DOWN_ROAD = os.path.join(r"C:\0_PolyU", "roadsGraph")
+    SAVE_PATH = r"E:\Population_Related"
     
     a = EVCSIndicator(CITY_RESULT, (GEO_DB, "GAUL_2024_L2"), (r"C:\\0_PolyU\\test\\indicator.gpkg", "city"))
-    a.EVCS(EVCS)
-    a.road(DOWN_ROAD)
-    # a.population()
+    # a.EVCS(EVCS)
+    # a.road(DOWN_ROAD)
+    # a.population(os.path.join(SAVE_PATH, "population_All"), 16)
     a.flooding(r"E:\Flooding_Related\flooding\floodingArea.shp")
     a.save()
     # print(a.df.columns)

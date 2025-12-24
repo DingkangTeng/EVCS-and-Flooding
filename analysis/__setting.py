@@ -68,10 +68,13 @@ POP_DICT = {
 
 # Plot standard name
 STAND_NAME = {
+    "EVCSNum": "EVCS count",
+    "EVCSChange": "EVCS change ratio",
+    "folldingCoverage": "Historical flooding area ratio (%)",
     "A_children_changeresultCols": "children",
     "A_young_changeresultCols": "young\nadult",
     "A_middle_changeresultCols": "middle-age\nadult",
-    "A_elderly_changeresultCols": "older adult",
+    "A_elderly_changeresultCols": "older\nadult",
     "A_Male_changeresultCols": "male",
     "A_Female_changeresultCols": "female",
     "A_All_changeresultCols": "all\npopulation",
@@ -79,11 +82,11 @@ STAND_NAME = {
     "A_1Num_changeresultCols": "administrative\nand public",
     "A_2Num_changeresultCols": "commercial\nand business ",
     "A_3Num_changeresultCols": "lersure\nand tourism",
-    "A_poiall_changeresultCols": "all\nPOI",
+    "A_POIAll_changeresultCols": "all POI",
     "A_children_Gini_changeresultCols": "children",
     "A_young_Gini_changeresultCols": "young\nadult",
     "A_middle_Gini_changeresultCols": "middle-age\nadult",
-    "A_elderly_Gini_changeresultCols": "older adult",
+    "A_elderly_Gini_changeresultCols": "older\nadult",
     "A_Male_Gini_changeresultCols": "male",
     "A_Female_Gini_changeresultCols": "female",
     "A_All_Gini_changeresultCols": "all\npopulation",
@@ -91,5 +94,5 @@ STAND_NAME = {
     "A_1Num_Gini_changeresultCols": "administrative\nand public",
     "A_2Num_Gini_changeresultCols": "commercial\nand business ",
     "A_3Num_Gini_changeresultCols": "lersure\nand tourism",
-    "A_poiall_Gini_changeresultCols": "all\nPOI"
+    "A_POIAll_Gini_changeresultCols": "all POI"
 }

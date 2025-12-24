@@ -36,16 +36,17 @@ def popAndPOIAnalysis(
     if not os.path.exists(savePath): os.makedirs(savePath)
 
     df, ratio, zeroCounts, nonZeroCounts = calRatio(
-        df, A_BEFORE, A_AFTER, True, accOrEquity
+        df, A_BEFORE, A_AFTER, True, True if accOrEquity == "equity" else False
     )
     
     # Save change ratio
     print("\n")
     df.to_csv(os.path.join(savePath, f"{scale}_{accOrEquity}_results.csv"))
     # Plot
-    subplot = plt.subplot("W", 1, 2, [1, 4])
+    subplot = plt.subplot("WN31", 1, 3, [1, 4, 4])
     ax1 = subplot.axs[1]
     ax2 = subplot.axs[0]
+    ax3 = subplot.axs[2]
 
     ## Right: non-0
     group: str
@@ -55,11 +56,15 @@ def popAndPOIAnalysis(
             # ECDF
             x = np.sort(groupData)
             y = np.arange(1, len(x)+1) / len(x)
-            ax1.plot(x, y, label=STAND_NAME.get(group, group).capitalize().replace("\n", " "), alpha=0.7, linewidth=2)
+            ax1.plot(
+                x, y,
+                label=STAND_NAME.get(group, group).capitalize().replace("\n", " ").replace("poi", "POI"),
+                alpha=0.7, linewidth=2
+            )
     ax1.set_xlabel("Change Ratio (%)")
     ax1.set_ylabel("Cumulative Probability")
-    ax1.yaxis.tick_right()
-    ax1.yaxis.set_label_position("right")
+    # ax1.yaxis.tick_right()
+    # ax1.yaxis.set_label_position("right")
     
     ## Left: proportion of 0 bar
     yPos = np.arange(len(ratio))
@@ -74,8 +79,8 @@ def popAndPOIAnalysis(
     
     ## Label
     for i, (zp, nzp) in enumerate(zip(zeroPercent, nonZeroPercent)):
-        ax2.text(zp/2, i, f"{zp:.2f}%", ha="center", va="center", fontsize=8, fontweight="bold") if zp != 0 else None
-        ax2.text(zp + nzp/2, i, f"{nzp:.2f}%", ha="center", va="center", fontsize=8, fontweight="bold")
+        ax2.text(zp/2, i, f"{zp:.2f}%", ha="center", va="center", fontsize=NOTE_SIZE, fontweight="bold") if zp != 0 else None
+        ax2.text(zp + nzp/2, i, f"{nzp:.2f}%", ha="center", va="center", fontsize=NOTE_SIZE, fontweight="bold")
     ax2.set_xlabel("Percentage (%)")
     ax2.set_yticks(yPos)
     ax2.set_yticklabels(ratio, rotation=45)
@@ -83,8 +88,6 @@ def popAndPOIAnalysis(
 
     subplot.fig.legend(loc="lower center", ncol=4)
     plt.standAxisName(ax2, 'y', STAND_NAME)
-
-    plt.plot(os.path.join(savePath, f"{scale}_{accOrEquity}.jpg"))
 
     # Wilcoxon
     wilcoxon = Wilcoxon(
@@ -95,20 +98,20 @@ def popAndPOIAnalysis(
     )
 
     # Draw box plot
-    fig, ax = plt.figure("D") if analysisType != "popDynamic" else plt.figure("SL")
+    # fig, ax = plt.figure("S1") if analysisType != "popDynamic" else plt.figure("S12")
     import seaborn as sns
     sns.boxplot(
         data=df[ratio],
-        ax = ax,
+        ax = ax3,
         showfliers=False,
         showmeans=True,
         color=BAR_COLORS[0][0]
     )
 
     # Add significance annotations
-    ymin, ymax = ax.get_ylim()
+    ymin, ymax = ax3.get_ylim()
     startHeight = ymax
-    lineStep = 0.08 * (ymax - ymin)
+    lineStep = 0.12 * (ymax - ymin)
     maxHeight = startHeight
     
     pairs = {startHeight: (0,0)}
@@ -131,7 +134,7 @@ def popAndPOIAnalysis(
             row = wilcoxon[(wilcoxon["group1"] == group1) & (wilcoxon["group2"] == group2)]
             
             ## Draw line
-            ax.plot(
+            ax3.plot(
                 [x1, x1, x2, x2], 
                 [
                     lineHeight,
@@ -150,7 +153,7 @@ def popAndPOIAnalysis(
             text = f"{e:.4f} ({m})" if m != "negligible" else f"{e:.4f}"
             if s not in {'', '.'}:
                 text = f"{text}$^{{{s}}}$"
-            ax.text(
+            ax3.text(
                 (x1 + x2) / 2,
                 lineHeight + lineStep/2,
                 text,
@@ -163,31 +166,35 @@ def popAndPOIAnalysis(
             if lineHeight not in pairs: pairs[lineHeight] = (x1, x2)
             else: pairs[lineHeight] = (min(x1, pairMin), max(x2, pairMax))
             maxHeight = max(maxHeight, lineHeight)
+    
+    ax3.set_ylim(
+        ymin,
+        max(2, maxHeight + lineStep) if accOrEquity == "accessibility" else max(0.8, maxHeight + lineStep)
+    )
+    # ax3.yaxis.tick_right()
+    ax3.set_ylabel("Change ratio (%)")
+    plt.standAxisName(ax3, 'x', STAND_NAME)
 
-    ax.set_ylim(ymin, maxHeight + lineStep)
-    plt.standAxisName(ax, 'x', STAND_NAME)
-
-    plt.plot(os.path.join(savePath, f"{scale}_{accOrEquity}_boxplot.jpg"))
+    plt.plot(os.path.join(savePath, f"{scale}_{accOrEquity}.jpg"))
 
     return
 
 # Debug
 if __name__ == "__main__":
-    root = r"C:\\0_PolyU\\test\\1km"
-    city = os.path.join(root, "city.csv")
-    iso3 = os.path.join(root, "city.csv")
-    popAndPOIAnalysis(city, "popStatic", root)
-    popAndPOIAnalysis(city, "popDynamic", root)
-    popAndPOIAnalysis(iso3, "popStatic", root)
-    popAndPOIAnalysis(iso3, "popDynamic", root)
+    root = r"C:\\0_PolyU\\test"
+    ANALY_RESULT = os.path.join(root, "3km")
+    CITY_RESULT = os.path.join(ANALY_RESULT, "city.csv")
+    iso3 = os.path.join(root, "iso3.csv")
+    popAndPOIAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT)
+    popAndPOIAnalysis(CITY_RESULT, "popDynamic", ANALY_RESULT)
+    popAndPOIAnalysis(CITY_RESULT, "POI", ANALY_RESULT)
+    # popAndPOIAnalysis(iso3, "popStatic", root)
+    # popAndPOIAnalysis(iso3, "popDynamic", root)
+    # popAndPOIAnalysis(iso3, "POI", root)
 
-    popAndPOIAnalysis(city, "popStatic", root, accOrEquity="equity")
-    popAndPOIAnalysis(city, "popDynamic", root, accOrEquity="equity")
-    popAndPOIAnalysis(iso3, "popStatic", root, accOrEquity="equity")
-    popAndPOIAnalysis(iso3, "popDynamic", root, accOrEquity="equity")
-    
-    popAndPOIAnalysis(city, "POI", root)
-    popAndPOIAnalysis(iso3, "POI", root)
-
-    popAndPOIAnalysis(city, "POI", root, accOrEquity="equity")
-    popAndPOIAnalysis(iso3, "POI", root, accOrEquity="equity")
+    popAndPOIAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT, accOrEquity="equity")
+    popAndPOIAnalysis(CITY_RESULT, "popDynamic", ANALY_RESULT, accOrEquity="equity")
+    popAndPOIAnalysis(CITY_RESULT, "POI", ANALY_RESULT, accOrEquity="equity")
+    # popAndPOIAnalysis(iso3, "popStatic", root, accOrEquity="equity")
+    # popAndPOIAnalysis(iso3, "popDynamic", root, accOrEquity="equity")
+    # popAndPOIAnalysis(iso3, "POI", root, accOrEquity="equity")

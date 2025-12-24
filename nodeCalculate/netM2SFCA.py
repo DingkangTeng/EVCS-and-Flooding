@@ -30,7 +30,7 @@ EDGES_ATTR = [
 def decayFunc(distance, d0, func: str) -> float:
     """Gaussian decay function"""
     if func == "Gaussian":
-        return np.exp(-0.5 * (distance / d0) ** 2)
+        return (np.exp(-0.5 * (distance / d0) ** 2)  - np.exp(-0.5)) / (1 - np.exp(-0.5))
     else:
         raise RuntimeError(" \
             Unexceptional decay function. Available function: \n \
@@ -220,35 +220,13 @@ class M2SFCA:
         
         return True
     
-def calAllLayer(path: str, d0: int, decayFunc: str, col: list[str] = NODES_ATTR_POP + NODES_ATTR_POI, maxThread: int = 1) -> None:
+def calAllLayer(path: str, d0: int, decayFunc: str, col: list[str] = NODES_ATTR_POP + NODES_ATTR_POI) -> None:
     log = loadJsonRecord(os.path.join(path, "log.json"), "M2SFCA", [])
     processed = log.get()
     gpkgs = readFiles(path).specificFile(["gpkg"])
     gpkgs.sort()
     
     n =len(gpkgs)
-    # futures = []
-    # debugDict = {}
-
-    # executor = ProcessPoolExecutor(max_workers=maxThread)
-    # for i, gpkg in enumerate(gpkgs):
-    #     if gpkg in processed: continue
-    #     tqdm.write("Processing {}({}/{})".format(gpkg, i + 1, n))
-        
-    #     intit = M2SFCA(os.path.join(path, gpkg), col)
-    #     future = executor.submit(intit.calOneLayer, d0, decayFunc, after=True)
-    #     futures.append(future)
-    #     debugDict[future] = gpkg
-
-    # for future in as_completed(futures):
-    #     gpkg = debugDict[future]
-    #     try:
-    #         result = future.result()
-    #     except Exception as e:
-    #         raise RuntimeError(f"Failed process {gpkg}: {e}")
-    #     else:
-    #         log.append(gpkg) if result else None
-    #         log.save()
     for i, gpkg in enumerate(gpkgs):
         if gpkg in processed: continue
         tqdm.write("Processing {}({}/{})".format(gpkg, i + 1, n))
@@ -260,8 +238,9 @@ def calAllLayer(path: str, d0: int, decayFunc: str, col: list[str] = NODES_ATTR_
 
     return
     
+
 if __name__ == "__main__":
     # a = M2SFCA(r"C:\0_PolyU\roadsGraph_BeijinInner\CHN.gpkg")
     # a.calOneLayer(1000, "Gaussian", "population_All") # type: ignore
     # a.calOneLayer(1000, "Gaussian", "population_All", after=True, maxThreads=os.cpu_count()) # type: ignore
-    calAllLayer(r"C:\\0_PolyU\\roadsGraph", 5000, "Gaussian", maxThread=8)
+    calAllLayer(r"C:\\0_PolyU\\roadsGraph", 3000, "Gaussian") #decay fun之前错了，重新算！
