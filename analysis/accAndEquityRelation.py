@@ -39,7 +39,7 @@ class accAndEquityAnalysis:
         addCol = ["iso3", "city", "EVCSNum", "EVCS_Change"] if self.scale == "city" else ["iso3", "EVCSNum"]
         df = df[A_BEFORE + A_AFTER + addCol]
         self.savePath = os.path.join(savePath, analysisType)
-        if not os.path.exists(savePath): os.makedirs(savePath)
+        if not os.path.exists(self.savePath): os.makedirs(self.savePath)
 
         df, ratio = calRatio(df, A_BEFORE, A_AFTER)
         df: pd.DataFrame = df[addCol + ratio.tolist()]

@@ -243,4 +243,4 @@ if __name__ == "__main__":
     # a = M2SFCA(r"C:\0_PolyU\roadsGraph_BeijinInner\CHN.gpkg")
     # a.calOneLayer(1000, "Gaussian", "population_All") # type: ignore
     # a.calOneLayer(1000, "Gaussian", "population_All", after=True, maxThreads=os.cpu_count()) # type: ignore
-    calAllLayer(r"C:\\0_PolyU\\roadsGraph", 3000, "Gaussian") #decay fun之前错了，重新算！
+    calAllLayer(r"C:\\0_PolyU\\roadsGraph", 5000, "Gaussian")
