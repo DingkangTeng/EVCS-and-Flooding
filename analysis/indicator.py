@@ -4,8 +4,10 @@ import numpy as np
 import rasterio as rio
 from rasterio.mask import mask
 from shapely.geometry.base import BaseGeometry
+from shapely.geometry import Polygon, box
+from pyproj import CRS
 from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from threading import Lock
 
 sys.path.append(".") # Set path to the roots
@@ -64,7 +66,43 @@ class EVCSIndicator:
         
         return result
     
-    def EVCS(self, evcs: str | tuple[str, str] | gpd.GeoDataFrame) -> None:
+    # def EVCS(self, evcs: str | tuple[str, str] | gpd.GeoDataFrame) -> None:
+    #     # Add density
+    #     self.df["EVCSDensity"] = self.df["EVCSNum"] / self.df["area"]
+
+    #     # Add coverage
+    #     evcs = self.__readFile(evcs, [])
+    #     self.df["EVCScoverage"] = np.nan
+    #     bar = tqdm(total=self.df.shape[0], desc="Calculating EVCS coverage", unit="city")
+
+    #     assert self.df.crs is not None
+    #     if evcs.crs != self.df.crs: evcs.to_crs(self.df.crs, inplace=True) # type: ignore
+    #     for row in self.df.itertuples():
+    #         idx = getattr(row, "Index")
+    #         boundary: BaseGeometry = getattr(row, "geometry")
+
+    #         # Get intersection
+    #         possibleMatchesIdx = list(evcs.sindex.intersection(boundary.bounds))
+    #         if possibleMatchesIdx:
+    #             possibleMatches = evcs.iloc[np.array(possibleMatchesIdx)]
+    #             evcsWithin = possibleMatches[possibleMatches.within(boundary)]
+    #         else:
+    #             evcsWithin = gpd.GeoDataFrame(geometry=[], crs=evcs.crs)
+
+    #         if len(evcsWithin) == 0: self.df.at[idx, "EVCScoverage"] = 0
+    #         else:
+    #             # Calculate dissloved buffer
+    #             points = evcsWithin.geometry.buffer(0.01).union_all()
+    #             intersection = points.intersection(boundary)
+    #             if intersection.is_empty: self.df.at[idx, "EVCScoverage"] = 0
+    #             else: self.df.at[idx, "EVCScoverage"] = intersection.area / boundary.area
+
+    #         bar.update()
+
+    #     bar.close()
+    #     return
+    
+    def EVCS(self, evcs: str | tuple[str, str] | gpd.GeoDataFrame, maxThread:int = 1) -> None:
         # Add density
         self.df["EVCSDensity"] = self.df["EVCSNum"] / self.df["area"]
 
@@ -75,30 +113,146 @@ class EVCSIndicator:
 
         assert self.df.crs is not None
         if evcs.crs != self.df.crs: evcs.to_crs(self.df.crs, inplace=True) # type: ignore
-        for row in self.df.itertuples():
-            idx = getattr(row, "Index")
-            boundary: BaseGeometry = getattr(row, "geometry")
 
-            # Get intersection
-            possibleMatchesIdx = list(evcs.sindex.intersection(boundary.bounds))
-            if possibleMatchesIdx:
-                possibleMatches = evcs.iloc[np.array(possibleMatchesIdx)]
-                evcsWithin = possibleMatches[possibleMatches.within(boundary)]
-            else:
-                evcsWithin = gpd.GeoDataFrame(geometry=[], crs=evcs.crs)
+        intersections = np.empty([self.df.shape[0]], dtype=gpd.GeoDataFrame)
+        n = 0
+        futures = []
+        idxDict = {}
+        
+        with ProcessPoolExecutor(max_workers=maxThread) as executor:
+            for row in self.df.itertuples():
+                idx = getattr(row, "Index")
+                boundary: BaseGeometry = getattr(row, "geometry")
 
-            if len(evcsWithin) == 0: self.df.at[idx, "EVCScoverage"] = 0
-            else:
-                # Calculate dissloved buffer
-                points = evcsWithin.geometry.buffer(0.01).union_all()
-                intersection = points.intersection(boundary)
-                if intersection.is_empty: self.df.at[idx, "EVCScoverage"] = 0
-                else: self.df.at[idx, "EVCScoverage"] = intersection.area / boundary.area
+                # Get intersection
+                possibleMatchesIdx = list(evcs.sindex.intersection(boundary.bounds))
+                if possibleMatchesIdx:
+                    possibleMatches = evcs.iloc[np.array(possibleMatchesIdx)]
+                    evcsWithin = possibleMatches[possibleMatches.within(boundary)]
+                else:
+                    evcsWithin = gpd.GeoDataFrame(geometry=[], crs=evcs.crs)
+                
+                future = executor.submit(self._getEVCSIntersection, evcsWithin, boundary, self.df.crs)
+                futures.append(future)
+                idxDict[future] = idx
+
+                # if evcsWithin.empty: self.df.at[idx, "EVCScoverage"] = 0
+                # else:
+                #     # Generate grid
+                #     minx, miny, maxx, maxy = boundary.bounds
+
+                #     WIDTH = 0.01 # Around 1km in WGS84
+                #     xCells = int(np.ceil((maxx - minx) / WIDTH))
+                #     yCells = int(np.ceil((maxy - miny) / WIDTH))
+
+                #     grid = np.empty([xCells * yCells], dtype=Polygon)
+                #     i = 0
+                #     for x0 in np.arange(minx, maxx, WIDTH):
+                #         for y0 in np.arange(miny, maxy, WIDTH):
+                #             x1 = x0 + WIDTH
+                #             y1 = y0 + WIDTH
+                #             cell = box(float(x0), float(y0), float(x1), float(y1))
+                #             grid[i] = cell
+                #             i += 1
+
+                #     gridGdf = gpd.GeoDataFrame(geometry=grid[:i], crs=self.df.crs)
+                #     gridGdf = gridGdf[gridGdf.intersects(boundary)]
+
+                #     # Calculate dissloved buffer
+                #     gridGdf = gridGdf.sjoin(evcsWithin, how="left")
+                #     intersection = gridGdf[gridGdf["index_right"].notna()]
+                    
+                #     if intersection.empty: self.df.at[idx, "EVCScoverage"] = 0
+                #     else:
+                #         self.df.at[idx, "EVCScoverage"] = intersection.shape[0] / gridGdf.shape[0]
+                #         intersections[n] = intersection
+                #         n += 1
+
+            for future in as_completed(futures):
+                idx = idxDict[future]
+                try:
+                    result, intersection = future.result()
+                except Exception as e:
+                    raise RuntimeError(f"{idx}: {e}")
+                else:
+                    self.df.at[idx, "EVCScoverage"] = result
+                    if intersection is not None:
+                        intersections[n] = intersection
+                        n += 1
+                    bar.update()
+        
+        bar.close()
+
+        # Save EVCS coverage geometry
+        interDf = gpd.pd.concat(intersections[:n], ignore_index=True)
+        interDf = gpd.GeoDataFrame(interDf, crs=self.df.crs).drop_duplicates("geometry").reset_index()
+        bar = tqdm(total=interDf.shape[0], desc="Saving EVCS coverage geometry", unit="city")
+
+        # Delete overlap gird
+        sidx = interDf.sindex
+        keep = np.empty([interDf.shape[0]], dtype=np.uint32)
+        n = 0
+
+        for i, geom in enumerate(interDf.geometry):
+            if geom is None or geom.is_empty: continue
+
+            # 1. 借助 sindex 找到可能相交的候选（bounding box 相交）
+            possibleIdx = set(sidx.intersection(geom.bounds))
+            
+            # 2. 只与已经保留的索引中的候选进行精确相交判断
+            kept = True
+            for j in keep[0:n]:
+                if j in possibleIdx:
+                    if geom.intersects(interDf.geometry.iloc[j]):
+                        kept = False
+                        break
+            
+            # 3. 如果没有和之前保留的几何相交，则保留当前
+            if kept:
+                keep[n] = i
+                n += 1
 
             bar.update()
+            
+        interDf.loc[keep[0:n]].reset_index(drop=True).to_file(
+            self.savePath[0], layer="EVCSCoverage", encoding="utf-8", layer_options={'OVERWRITE': 'YES'}
+        )
 
         bar.close()
+
         return
+    
+    @staticmethod
+    def _getEVCSIntersection(
+        evcsWithin: gpd.GeoDataFrame, boundary: BaseGeometry,
+        crs: CRS, WIDTH = 0.008333 # Around 1km in WGS84
+    ) -> tuple[float, None | gpd.GeoSeries]:
+        if evcsWithin.empty: return 0, None
+        else:
+            minx, miny, maxx, maxy = boundary.bounds
+            
+            xCells = int(np.ceil((maxx - minx) / WIDTH))
+            yCells = int(np.ceil((maxy - miny) / WIDTH))
+
+            grid = np.empty([xCells * yCells], dtype=Polygon)
+            i = 0
+            for x0 in np.arange(minx, maxx, WIDTH):
+                for y0 in np.arange(miny, maxy, WIDTH):
+                    x1 = x0 + WIDTH
+                    y1 = y0 + WIDTH
+                    cell = box(float(x0), float(y0), float(x1), float(y1))
+                    grid[i] = cell
+                    i += 1
+
+            gridGdf = gpd.GeoDataFrame(geometry=grid[:i], crs=crs)
+            gridGdf = gridGdf[gridGdf.intersects(boundary)]
+
+            # Calculate dissloved buffer
+            gridGdf = gridGdf.sjoin(evcsWithin, how="left")
+            intersection = gridGdf[gridGdf["index_right"].notna()]
+
+        if intersection.empty: return 0, None
+        else: return intersection.shape[0] / gridGdf.shape[0], intersection.geometry
     
     def road(self, roadRoot: str) -> None:
         self.df["roadDensity"] = np.nan
@@ -221,9 +375,9 @@ if __name__ == "__main__":
     SAVE_PATH = r"E:\Population_Related"
     
     a = EVCSIndicator(CITY_RESULT, (GEO_DB, "GAUL_2024_L2"), (r"C:\\0_PolyU\\test\\indicator.gpkg", "city"))
-    # a.EVCS(EVCS)
+    a.EVCS(EVCS, 32)
     # a.road(DOWN_ROAD)
     # a.population(os.path.join(SAVE_PATH, "population_All"), 16)
-    a.flooding(r"E:\Flooding_Related\flooding\floodingArea.shp")
+    # a.flooding(r"E:\Flooding_Related\flooding\floodingArea.shp")
     a.save()
     # print(a.df.columns)

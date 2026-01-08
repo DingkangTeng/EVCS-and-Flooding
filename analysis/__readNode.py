@@ -1,5 +1,22 @@
 import pandas as pd
 import geopandas as gpd
+from typing import overload
+
+@overload
+def readNode(
+    path: str,
+    minEvcsNum: int = 0, filterBy: str = "", # iso3 or city
+    ignoreUneffected: bool = False, ignoreIsolate: bool = True
+) -> tuple[pd.DataFrame, int, int]:
+    ...
+
+@overload
+def readNode(
+    path: tuple[str, str],
+    minEvcsNum: int = 0, filterBy: str = "", # iso3 or city
+    ignoreUneffected: bool = False, ignoreIsolate: bool = True
+) -> tuple[gpd.GeoDataFrame, int, int]:
+    ...
 
 def readNode(
     path: str | tuple[str, str],

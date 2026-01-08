@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import scipy.stats as stats
 
+from ..__setting import significanceStars
+
 # Wilcoxon signed-rank test
 def Wilcoxon(
     compareCol: list[str] | np.ndarray, df: pd.DataFrame, yName: str = "value",
@@ -31,7 +33,7 @@ def Wilcoxon(
                 "magnitude": "negligible" if r < 0.1 else "small" if r < 0.3 else "moderate" if r < 0.5 else "large",
                 "w": stat,
                 "p": round(p, 4),
-                "significance": "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "." if p < 0.1 else ""
+                "significance": significanceStars.sign(p)
             })
 
     wilcoxon = pd.DataFrame(wilcoxon)
@@ -39,9 +41,9 @@ def Wilcoxon(
     if savePath != "":
         wilcoxon.to_csv(savePath, index=False, encoding="utf-8")
         with open(savePath, 'a', encoding="utf-8") as f:
-            f.write("\n\nSignif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1")
+            f.write(significanceStars.SIGN_CODES)
     
     elif show:
-        print(wilcoxon, "\n\nSignif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1 \n")
+        print(wilcoxon, significanceStars.SIGN_CODES)
 
     return wilcoxon

@@ -1,67 +1,29 @@
-import sys, os
+import sys
 import geopandas as gpd
-import shap
 import numpy as np
 import seaborn as sns
-from sklearn.ensemble import RandomForestRegressor
 from statsmodels.tools.tools import add_constant
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from matplotlib.patches import Circle
 
 sys.path.append(".") # Set path to the roots
 
-from analysis.__readNode import readNode
-from analysis.__setting import STAND_NAME, AColumns
-from analysis.__calRatio import calRatio
 from _plot import plt
 
-class regressor:
-    __sltos__ = ["X_COL", "df", "ratio"]
-    def __init__(self, result: str, indicator: str, checkCorelation: bool = True) -> None:
-        self.X_COL = [
-            "EVCScoverage", "EVCSDensity",
-            "roadDensity", "roadCoverage",
-            "populationDensity", "populationCV",
-            "folldingCoverage"
-        ]
+class autoCorrelation:
+    __sltos__ = ["X_COL", "df", "Y_COL"]
 
-        A_BEFORE = []
-        A_AFTER = []
-        for analysisType in ["popStatic", "popDynamic", "POI"]:
-            A_ACC_BEFORE, A_ACC_AFTER = AColumns(analysisType, "accessibility")
-            A_EQU_BEFORE, A_EQU_AFTER = AColumns(analysisType, "equity")
-            # Only consider the overall demograpic/POI
-            A_BEFORE += [A_ACC_BEFORE[-1], A_EQU_BEFORE[-1]]
-            A_AFTER += [A_ACC_AFTER[-1], A_EQU_AFTER[-1]]
-        addCol = ["iso3", "EVCSNum"]
-        
-        df, _, _ = readNode(result)
-        df = df[A_BEFORE + A_AFTER + addCol + ["city"]].set_index("city")
-
-        df, self.ratio = calRatio(df, A_BEFORE, A_AFTER)
-        df: gpd.pd.DataFrame = df[addCol + self.ratio.tolist()]
-
-        gdf = gpd.read_file(indicator)[self.X_COL + ["city", "geometry"]].set_index("city")
-        self.df = gpd.GeoDataFrame(df.join(gdf).dropna(), crs=gdf.crs)
-        del gdf
+    def __init__(
+        self,
+        df: gpd.pd.DataFrame | gpd.GeoDataFrame,
+        xcol: list[str] | np.ndarray, ycol: list[str] | np.ndarray,
+        checkCorelation: bool = True
+    ) -> None:
+        self.X_COL = xcol
+        self.Y_COL = ycol
+        self.df = df.dropna()
         
         if checkCorelation: self.__checkCollinearity()
-
-        return
-
-    def rfRegression(self) -> None:
-        X = self.df[self.X_COL]
-        for ycol in self.ratio:
-            Y = self.df[ycol]
-            model = RandomForestRegressor()
-            model.fit(X, Y)
-
-            # SHAP
-            explainer = shap.TreeExplainer(model)
-            shapValue = explainer.shap_values(X)
-            print(ycol)
-            shap.summary_plot(shapValue, X, title=ycol)
-            shap.dependence_plot("EVCSDensity", shapValue, X, interaction_index=None)
 
         return
     
@@ -83,7 +45,7 @@ class regressor:
         
         # 输出相关系数矩阵
         print("\n相关系数矩阵:")
-        print(corr_matrix.round(3).to_string())
+        print(corr_matrix.round(4).to_string())
         
         # 2. 计算方差膨胀因子(VIF)
         print("\n" + "="*60)
@@ -239,7 +201,7 @@ class regressor:
             }
         
         # 检验目标变量（如果提供）
-        for col in self.ratio:
+        for col in self.Y_COL:
             moran = esda.Moran(self.df[col], knn)
             moran_results[f"Y_{col}"] = {
                 'I': moran.I,
@@ -281,7 +243,7 @@ class regressor:
         p_values = moran_df[['p_value']].copy()
         p_values['-log10(p)'] = -np.log10(p_values['p_value'])
         
-        sns.heatmap(p_values['-log10(p)'].values.reshape(-1, 1), 
+        sns.heatmap(np.asarray(p_values['-log10(p)'].values).reshape(-1, 1), 
                     annot=True, fmt=".2f", cmap="YlOrRd", 
                     ax=axes[0, 1], cbar_kws={'label': '-log10(p-value)'})
         axes[0, 1].set_yticklabels(p_values.index)
@@ -293,7 +255,7 @@ class regressor:
         print("\n3. 局部空间自相关分析（LISA聚类）...")
         
         # 选择一个变量进行LISA分析（例如第一个目标变量或第一个解释变量）
-        var_for_lisa = self.ratio[0]
+        var_for_lisa = self.Y_COL[0]
         
         lisa = esda.Moran_Local(self.df[var_for_lisa], knn)
         
@@ -404,14 +366,3 @@ class regressor:
             'spatial_lag_variables': spatial_lag_df,
             'lisa_results': lisa_results
         }
-
-# Debug
-if __name__ == "__main__":
-    root = r"C:\\0_PolyU\\test"
-    CITY_RESULT = os.path.join(root, "3km", "city.csv")
-    INDICATOR = os.path.join(root, "indicator.gpkg")
-    
-    a = regressor(CITY_RESULT, INDICATOR, checkCorelation=False)
-    a.dropCorelation({"roadDensity", "EVCScoverage"}, checkCorelation=False)
-    a.spatialAuto()
-    a.rfRegression()

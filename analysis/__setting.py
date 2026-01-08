@@ -25,6 +25,9 @@ def AColumns(analysisType: str, accOrEquity: str) -> tuple[list[str], list[str]]
     elif analysisType == "popDynamic":
         ABefore = list(A_POP.dynamicBefore)
         AAfter = list(A_POP.dynamicAfter)
+    elif analysisType == "pop":
+        ABefore = list(A_POP.before)
+        AAfter = list(A_POP.after)
     else:
         raise RuntimeError("Unsupport analysis type {}.".format(analysisType))
     
@@ -69,28 +72,29 @@ POP_DICT = {
 # Plot standard name
 STAND_NAME = {
     "EVCSNum": "EVCS count",
-    "EVCSChange": "EVCS change ratio",
+    "EVCSChange": "EVCS change ratio (%)",
+    "EVCScoverage": "EVCS coverage ratio (%)",
     "folldingCoverage": "Historical flooding area ratio (%)",
     "A_children_changeresultCols": "children",
-    "A_young_changeresultCols": "young\nadult",
-    "A_middle_changeresultCols": "middle-age\nadult",
-    "A_elderly_changeresultCols": "older\nadult",
+    "A_young_changeresultCols": "young",
+    "A_middle_changeresultCols": "middle-\nage",
+    "A_elderly_changeresultCols": "older",
     "A_Male_changeresultCols": "male",
     "A_Female_changeresultCols": "female",
-    "A_All_changeresultCols": "all\npopulation",
-    "A_2024_changeresultCols": "dynamic\npopulation",
+    "A_All_changeresultCols": "all",
+    "A_2024_changeresultCols": "dynamic",
     "A_1Num_changeresultCols": "administrative\nand public",
     "A_2Num_changeresultCols": "commercial\nand business ",
     "A_3Num_changeresultCols": "lersure\nand tourism",
     "A_POIAll_changeresultCols": "all POI",
     "A_children_Gini_changeresultCols": "children",
-    "A_young_Gini_changeresultCols": "young\nadult",
-    "A_middle_Gini_changeresultCols": "middle-age\nadult",
-    "A_elderly_Gini_changeresultCols": "older\nadult",
+    "A_young_Gini_changeresultCols": "young",
+    "A_middle_Gini_changeresultCols": "middle-\nage",
+    "A_elderly_Gini_changeresultCols": "older",
     "A_Male_Gini_changeresultCols": "male",
     "A_Female_Gini_changeresultCols": "female",
-    "A_All_Gini_changeresultCols": "all\npopulation",
-    "A_2024_Gini_changeresultCols": "dynamic\npopulation",
+    "A_All_Gini_changeresultCols": "all",
+    "A_2024_Gini_changeresultCols": "dynamic",
     "A_1Num_Gini_changeresultCols": "administrative\nand public",
     "A_2Num_Gini_changeresultCols": "commercial\nand business ",
     "A_3Num_Gini_changeresultCols": "lersure\nand tourism",

@@ -40,7 +40,7 @@ def figure(figsize: str) -> tuple[Figure, Axes]:
 class subplot:
     __slots__ = ["__fig", "__axs"]
 
-    def __init__(self, figsize: str, y: int, x: int, widthRatios: list[int] | None, legend: bool = True) -> None:
+    def __init__(self, figsize: str, y: int, x: int, widthRatios: list[int] | None = None, legend: bool = True) -> None:
         from matplotlib.gridspec import GridSpec
 
         self.__fig = plt.figure(figsize=getattr(FIG_SIZE, figsize))

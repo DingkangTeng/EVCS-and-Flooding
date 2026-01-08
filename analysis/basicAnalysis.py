@@ -8,9 +8,9 @@ sys.path.append(".") # Set path to the roots
 
 from _plot import plt, BAR_COLORS
 from analysis.__readNode import readNode
-from __setting import STAND_NAME
+from analysis.__setting import STAND_NAME
 
-def EVCSAndFlooding(path: str, savePath: str = "", minEvcsNum: int = 0, nBins: int = 10) -> None:
+def EVCSAndFlooding(path: str, savePath: str = "", minEvcsNum: int = 0, nBins: int = 10) -> pd.DataFrame:
     df, n, _ = readNode(path, minEvcsNum)
     idx = "city" if "city" in path else "iso3"
 
@@ -27,21 +27,27 @@ def EVCSAndFlooding(path: str, savePath: str = "", minEvcsNum: int = 0, nBins: i
         index=False
     )
 
-    for col in ["EVCSNum", "EVCSChange"]:
-        __binPlot(df, col, nBins, os.path.join(savePath, "{}_{}.jpg".format(col, idx)))
+    __binPlot(df, "EVCSChange", nBins, os.path.join(savePath, "EVCSChange_{}.jpg".format(idx)))
 
-    return
+    return df[[idx, "EVCSChange"]]
 
 def otherIndicator(
     path: tuple[str, str],
     indicators: list[str], idx: str = "city",
+    EVCSChange: pd.DataFrame | None = None,
     savePath: str = "",
     minEvcsNum: int = 0, nBins: int = 10
 ) -> None:
     df, _, _ = readNode(path, minEvcsNum)
 
+    if EVCSChange is not None and "EVCSChange" not in df.columns:
+        df = df.merge(EVCSChange, left_on="city", right_on="city", how="left")
+        df.rename(columns={"EVCSChange_y": "EVCSChange"}, inplace=True)
+        df["EVCSChange"] = df["EVCSChange"] / 100
+        df.to_file(path[0], layer=path[1], encoding="utf-8")
+
     for col in indicators:
-        if "Coverage" in col: df[col] *= 100
+        if "overage" in col: df[col] *= 100 # Coverage or coverage
 
         __binPlot(df, col, nBins, os.path.join(savePath, "{}_{}.jpg".format(col, idx)))
 
@@ -91,8 +97,8 @@ def __binPlot(df: pd.DataFrame, col: str, nBins: int, savePath: str = "") -> Non
     mean = df[col].mean()
     p50 = df[col].quantile(0.5)
 
-    ax.axvline(mean, color="red", linestyle='--', linewidth=2, label=f'Mean: {mean:.4f}')
-    ax.axvline(p50, color="orange", linestyle=':', linewidth=1.5, alpha=0.8, label=f'Median: {p50:.4f}')
+    ax.axvline(mean, color="red", linestyle='--', linewidth=2, label=f'Mean: {mean:.2f}')
+    ax.axvline(p50, color="orange", linestyle=':', linewidth=1.5, alpha=0.8, label=f'Median: {p50:.2f}')
     ax.legend()
 
     plt.plot(savePath)
@@ -102,8 +108,6 @@ if __name__ == "__main__":
     ANALY_RESULT_ROOT = r"C:\\0_PolyU\\test"
     CITY_RESULT = os.path.join(ANALY_RESULT_ROOT, "3km", "city.csv")
     INDICATOR = os.path.join(ANALY_RESULT_ROOT, "indicator.gpkg")
-    iso3 = os.path.join(ANALY_RESULT_ROOT, "3km", "city.csv")
 
-    EVCSAndFlooding(CITY_RESULT, ANALY_RESULT_ROOT)
-    # EVCSAndFlooding(iso3, ANALY_RESULT_ROOT)
-    otherIndicator((INDICATOR, "city"), ["folldingCoverage"], savePath=ANALY_RESULT_ROOT)
+    EVCSchange = EVCSAndFlooding(CITY_RESULT, ANALY_RESULT_ROOT)
+    otherIndicator((INDICATOR, "city"), ["EVCScoverage", "folldingCoverage"], EVCSChange=EVCSchange, savePath=ANALY_RESULT_ROOT)

@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
 # Fig size
-LABEL_SIZE = 24
+LABEL_SIZE = 28
 TICK_SIZE = int(LABEL_SIZE * 0.9)
 NOTE_SIZE = int(LABEL_SIZE * 0.7)
 @dataclass

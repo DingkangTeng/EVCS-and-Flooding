@@ -21,7 +21,7 @@ def popAndPOIAnalysis(
 
     Parameters
     ----------
-    analysisType : {'POI', 'popStatic', 'popDynamic'}
+    analysisType : {'POI', 'popStatic', 'popDynamic', 'pop'}
         'POI' analysis the relationship between different POI. 'popStatic' analysis the relationship
         between gender demograph, age demograph and all population. 'popDynamic' analysis the relatiopship
         between all static population and all dynaic population.
@@ -43,13 +43,15 @@ def popAndPOIAnalysis(
     print("\n")
     df.to_csv(os.path.join(savePath, f"{scale}_{accOrEquity}_results.csv"))
     # Plot
-    subplot = plt.subplot("WN31", 1, 3, [1, 4, 4])
+    subplot = plt.subplot("WN31", 1, 3, [1, 3, 4])
     ax1 = subplot.axs[1]
     ax2 = subplot.axs[0]
     ax3 = subplot.axs[2]
 
     ## Right: non-0
     group: str
+    colors = BAR_COLORS[0] + BAR_COLORS[2]
+    i = 0
     for group in ratio:
         groupData = df[group][(df[group] != 0) & df[group].notna()]
         if len(groupData) > 0:
@@ -59,8 +61,11 @@ def popAndPOIAnalysis(
             ax1.plot(
                 x, y,
                 label=STAND_NAME.get(group, group).capitalize().replace("\n", " ").replace("poi", "POI"),
-                alpha=0.7, linewidth=2
+                color=colors[i],
+                linewidth=2
             )
+            i += 1
+
     ax1.set_xlabel("Change Ratio (%)")
     ax1.set_ylabel("Cumulative Probability")
     # ax1.yaxis.tick_right()
@@ -86,7 +91,7 @@ def popAndPOIAnalysis(
     ax2.set_yticklabels(ratio, rotation=45)
     ax2.grid(True, alpha=0.3, axis='x')
 
-    subplot.fig.legend(loc="lower center", ncol=4)
+    subplot.fig.legend(loc="lower center", ncol=np.ceil(len(ratio)/2)+1)
     plt.standAxisName(ax2, 'y', STAND_NAME)
 
     # Wilcoxon
@@ -108,7 +113,26 @@ def popAndPOIAnalysis(
         color=BAR_COLORS[0][0]
     )
 
+    # Add background color for different groups
+    for i, col in enumerate(ratio):
+        style = col.split("_")[1]
+        faceColor = (
+            BAR_COLORS[1][0] if style in {"children", "young", "middle", "elderly", "1Num", "2Num", "3Num"} else 
+            BAR_COLORS[1][1] if style in {"Male", "Female", "POIAll"} else
+            BAR_COLORS[1][2] if style == "All" else
+            BAR_COLORS[1][3] if style == "2024" else
+            BAR_COLORS[1][4]
+        )
+        ax3.axvspan(
+            i - 0.5,
+            i + 0.5,
+            facecolor=faceColor,
+            alpha=0.2,
+            zorder=0
+        )
+
     # Add significance annotations
+    ax3.set_xlim(-0.5, len(ratio) - 0.5)
     ymin, ymax = ax3.get_ylim()
     startHeight = ymax
     lineStep = 0.12 * (ymax - ymin)
@@ -117,8 +141,13 @@ def popAndPOIAnalysis(
     pairs = {startHeight: (0,0)}
     for x1, group1 in enumerate(ratio[:-1]):
         for x2, group2 in enumerate(ratio[x1+1:]):
-            if group1.split("_")[1] in {"children", "young", "middle", "elderly"} \
-                and group2.split("_")[1] in {"Male", "Female"}: continue
+            g1Name = group1.split("_")[1]
+            g2Name = group2.split("_")[1]
+            if (
+                (g1Name in {"children", "young", "middle", "elderly"} and g2Name in {"Male", "Female", "2024"}) or
+                (g1Name in {"Male", "Female"} and g2Name == "2024")
+            ):
+                continue
             
             x2 += (x1 + 1)
 
@@ -185,8 +214,9 @@ if __name__ == "__main__":
     ANALY_RESULT = os.path.join(root, "3km")
     CITY_RESULT = os.path.join(ANALY_RESULT, "city.csv")
     iso3 = os.path.join(root, "iso3.csv")
-    popAndPOIAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT)
-    popAndPOIAnalysis(CITY_RESULT, "popDynamic", ANALY_RESULT)
+    # popAndPOIAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT)
+    # popAndPOIAnalysis(CITY_RESULT, "popDynamic", ANALY_RESULT)
+    popAndPOIAnalysis(CITY_RESULT, "pop", ANALY_RESULT)
     popAndPOIAnalysis(CITY_RESULT, "POI", ANALY_RESULT)
     # popAndPOIAnalysis(iso3, "popStatic", root)
     # popAndPOIAnalysis(iso3, "popDynamic", root)
