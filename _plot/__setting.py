@@ -8,9 +8,10 @@ NOTE_SIZE = int(LABEL_SIZE * 0.7)
 @dataclass
 class __FIG_SIZE:
     D: tuple[int, int] = (12, 12)   # Default
-    D31: tuple[int, int] = (8, 8) # Default 3*3
+    D31: tuple[int, int] = (8, 8) # Default 3*1
     H: tuple[int, int] = (12, 24)   # High
     N: tuple[int, int] = (12, 6)   # Narrow
     W: tuple[int, int] = (24, 12)    # Wide
     WN31: tuple[int, int] = (24, 10)    # Wide Narrow
+    S: tuple[int, int] = (6, 6)     # Small
 FIG_SIZE = __FIG_SIZE()

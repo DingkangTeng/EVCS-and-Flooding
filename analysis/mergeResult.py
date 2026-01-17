@@ -103,7 +103,7 @@ class mergeData:
             (cityStats["affected"] == 0) & 
             (cityStats["EVCSChange"] == 0)
         ]["city"].tolist()
-        df = df[~df["city"].isin(cityStats)]
+        df = df[(~df["city"].isin(cityStats)) & (~df['type'].str.contains('waterbody', case=False, na=False))]
 
         gpd.GeoDataFrame(df, crs=dfs[0].crs).to_file(
             os.path.join(savePath, "merge.gpkg"),

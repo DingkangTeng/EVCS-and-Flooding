@@ -32,12 +32,6 @@ class calculateRoadLength:
                 WHERE tempTable.fid = edges.fid
             """
         )
-        # cursor.execute(
-        #     """
-        #     UPDATE edges
-        #     SET length = ST_Length(geom, 1)
-        #     """
-        # )
         cursor.execute("DROP TABLE IF EXISTS tempTable")
         conn.commit()
         conn.close()

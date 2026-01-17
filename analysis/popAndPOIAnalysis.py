@@ -1,6 +1,8 @@
 import sys, os
 import numpy as np
+import seaborn as sns
 from matplotlib.axes import Axes
+from matplotlib.patches import Patch
 
 sys.path.append(".") # Set path to the roots
 
@@ -9,6 +11,7 @@ from analysis.__readNode import readNode
 from analysis.__setting import STAND_NAME, AColumns
 from analysis.__statisticalDiff import Wilcoxon
 from analysis.__calRatio import calRatio
+from analysis.relationAnalysis import relationAnalysis
 
 def popAndPOIAnalysis(
     path: str, analysisType: str,
@@ -43,35 +46,44 @@ def popAndPOIAnalysis(
     print("\n")
     df.to_csv(os.path.join(savePath, f"{scale}_{accOrEquity}_results.csv"))
     # Plot
-    subplot = plt.subplot("WN31", 1, 3, [1, 3, 4])
-    ax1 = subplot.axs[1]
-    ax2 = subplot.axs[0]
-    ax3 = subplot.axs[2]
+    subplot = plt.subplot("WN31", 1, 3, widthRatios=[3, 1, 5])
+    # ax1 = subplot.axs[1] # Non zero ECDF
+    ax1 = subplot.axs[0] # Relation scatter
+    ax2 = subplot.axs[1] # Proportion of zero bar
+    ax3 = subplot.axs[2] # Box plot
+    legends = []
 
-    ## Right: non-0
-    group: str
-    colors = BAR_COLORS[0] + BAR_COLORS[2]
-    i = 0
-    for group in ratio:
-        groupData = df[group][(df[group] != 0) & df[group].notna()]
-        if len(groupData) > 0:
-            # ECDF
-            x = np.sort(groupData)
-            y = np.arange(1, len(x)+1) / len(x)
-            ax1.plot(
-                x, y,
-                label=STAND_NAME.get(group, group).capitalize().replace("\n", " ").replace("poi", "POI"),
-                color=colors[i],
-                linewidth=2
-            )
-            i += 1
+    addLegend = relationAnalysis(
+        path,
+        "popStatic" if analysisType == "pop" else analysisType,
+        os.path.dirname(savePath)
+    ).plot((accOrEquity, "evcs"), ax=ax1)
+    legends.extend(addLegend)
 
-    ax1.set_xlabel("Change Ratio (%)")
-    ax1.set_ylabel("Cumulative Probability")
-    # ax1.yaxis.tick_right()
-    # ax1.yaxis.set_label_position("right")
+    # ## non-0 ECDF
+    # group: str
+    # colors = BAR_COLORS[0] + BAR_COLORS[2]
+    # i = 0
+    # for group in ratio:
+    #     groupData = df[group][(df[group] != 0) & df[group].notna()]
+    #     if len(groupData) > 0:
+    #         # ECDF
+    #         x = np.sort(groupData)
+    #         y = np.arange(1, len(x)+1) / len(x)
+    #         ax1.plot(
+    #             x, y,
+    #             label=STAND_NAME.get(group, group).capitalize().replace("\n", " ").replace("poi", "POI"),
+    #             color=colors[i],
+    #             linewidth=2
+    #         )
+    #         i += 1
+
+    # ax1.set_xlabel("Change Ratio (%)")
+    # ax1.set_ylabel("Cumulative Probability")
+    # # ax1.yaxis.tick_right()
+    # # ax1.yaxis.set_label_position("right")
     
-    ## Left: proportion of 0 bar
+    ## Proportion of 0 bar
     yPos = np.arange(len(ratio))
     
     totalCounts = [zero + non_zero for zero, non_zero in zip(zeroCounts, nonZeroCounts)]
@@ -90,9 +102,9 @@ def popAndPOIAnalysis(
     ax2.set_yticks(yPos)
     ax2.set_yticklabels(ratio, rotation=45)
     ax2.grid(True, alpha=0.3, axis='x')
-
-    subplot.fig.legend(loc="lower center", ncol=np.ceil(len(ratio)/2)+1)
     plt.standAxisName(ax2, 'y', STAND_NAME)
+    # Continent
+    legends.extend(ax2.get_legend_handles_labels()[0])
 
     # Wilcoxon
     wilcoxon = Wilcoxon(
@@ -102,9 +114,7 @@ def popAndPOIAnalysis(
         os.path.join(savePath, f"{scale}_{accOrEquity}_wilcoxon.csv") if savePath != "" else ""
     )
 
-    # Draw box plot
-    # fig, ax = plt.figure("S1") if analysisType != "popDynamic" else plt.figure("S12")
-    import seaborn as sns
+    # Box plot
     sns.boxplot(
         data=df[ratio],
         ax = ax3,
@@ -204,7 +214,13 @@ def popAndPOIAnalysis(
     ax3.set_ylabel("Change ratio (%)")
     plt.standAxisName(ax3, 'x', STAND_NAME)
 
-    plt.plot(os.path.join(savePath, f"{scale}_{accOrEquity}.jpg"))
+    subplot.fig.legend(
+        loc="lower center",
+        handles=legends,
+        ncol=6
+    )
+
+    plt.plot(savePath, f"{scale}_{accOrEquity}.jpg")
 
     return
 
@@ -222,8 +238,7 @@ if __name__ == "__main__":
     # popAndPOIAnalysis(iso3, "popDynamic", root)
     # popAndPOIAnalysis(iso3, "POI", root)
 
-    popAndPOIAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT, accOrEquity="equity")
-    popAndPOIAnalysis(CITY_RESULT, "popDynamic", ANALY_RESULT, accOrEquity="equity")
+    popAndPOIAnalysis(CITY_RESULT, "pop", ANALY_RESULT, accOrEquity="equity")
     popAndPOIAnalysis(CITY_RESULT, "POI", ANALY_RESULT, accOrEquity="equity")
     # popAndPOIAnalysis(iso3, "popStatic", root, accOrEquity="equity")
     # popAndPOIAnalysis(iso3, "popDynamic", root, accOrEquity="equity")
