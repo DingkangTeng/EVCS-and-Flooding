@@ -10,7 +10,8 @@ from crawler.basicCrawler import crawler
 from _function.readFiles import mkdir, readFiles
 
 class globalPopulation(crawler):
-    __url = "https://hub.worldpop.org/ajax/geolisting/category?id=88"
+    # __url = "https://hub.worldpop.org/ajax/geolisting/category?id=88"
+    __url = "https://hub.worldpop.org/ajax/geolisting/category?id=135" #2025 data
     __countries: list[dict[str, str]] = []
     """
     meta example:
@@ -30,11 +31,12 @@ class globalPopulation(crawler):
         print("Getting all countries' metadata from WolfPop...")
         self.getAllCountries()
     
-    def getAllCountries(self) -> None:
+    def getAllCountries(self, year: int = 2025) -> None:
         super().__init__(self.__url)
         r = self.rget()
         self.__countries = r.json()
         for x in self.__countries:
+            if x["popyear"] != year: continue
             x.pop("desc", "file_image")
             x.pop("file_html")
             self.__indexC.append(x["country"])
@@ -53,6 +55,7 @@ class globalPopulation(crawler):
         if id == "" and country in self.__indexC:
             meta: dict = self.__countries[self.__indexC.index(country)]
             id = meta["id"]
+            country = meta["country"]
         elif id == "" and country not in self.__indexC:
             print("Country {} is not collected in worlpop".format(country))
             return False
@@ -76,11 +79,11 @@ class globalPopulation(crawler):
             print("No data found for country {}".format(country))
             return False
         downloadUrl0 = db["href"]
-        if downloadUrl0 is not str:
+        if not isinstance(downloadUrl0, str):
             print("No data found for country {}".format(country))
             return False
         iso = downloadUrl0.split("/") # Format see in .downloadOneCountryByISO url
-        iso = iso[-3]
+        iso = iso[-5] # Old version iso = iso[-3]
         savePath2 = os.path.join(savePath, iso)
         mkdir(savePath2)
         existFile = readFiles(savePath2).specificFile(suffix=["tif"])
@@ -88,7 +91,7 @@ class globalPopulation(crawler):
             if not isinstance(i, Tag):
                 continue
             downloadUrl = i["href"]
-            if downloadUrl is not str:
+            if not isinstance(downloadUrl, str):
                 continue
             filename = downloadUrl.split("/")[-1]
             if filename in existFile:
@@ -117,6 +120,8 @@ class globalPopulation(crawler):
                 self.download(os.path.join(savePath, file), multi=False)
 
 if __name__ == "__main__":
+    DOWN_POP = os.path.join("..", "_Data", "globalPopulation")
     a = globalPopulation()
-    for country in ["USA"]:
-        a.downloadOneCountryByISO(os.path.join("C:\\0_PolyU\\population2_tmp", country), country)
+    # for country in ["USA"]:
+    #     a.downloadOneCountryByISO(os.path.join("C:\\0_PolyU\\population2_tmp", country), country)
+    a.downloadAll(DOWN_POP)
