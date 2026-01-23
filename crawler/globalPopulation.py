@@ -3,15 +3,17 @@ import sys, os
 import pandas as pd
 from bs4 import BeautifulSoup as bs
 from bs4 import Tag
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 sys.path.append(".") # Set path to the roots
 
 from crawler.basicCrawler import crawler
 from _function.readFiles import mkdir, readFiles
 
-class globalPopulation(crawler):
+class globalPopulation:
     # __url = "https://hub.worldpop.org/ajax/geolisting/category?id=88"
-    __url = "https://hub.worldpop.org/ajax/geolisting/category?id=135" #2025 data
+    __url = "https://hub.worldpop.org/ajax/geolisting/category?id=138" #2025 data
     __countries: list[dict[str, str]] = []
     """
     meta example:
@@ -28,24 +30,40 @@ class globalPopulation(crawler):
     __indexC = []
 
     def __init__(self):
-        print("Getting all countries' metadata from WolfPop...")
         self.getAllCountries()
     
     def getAllCountries(self, year: int = 2025) -> None:
-        super().__init__(self.__url)
-        r = self.rget()
-        self.__countries = r.json()
-        for x in self.__countries:
-            if x["popyear"] != year: continue
+        tqdm.write("Getting all countries' metadata from WolfPop...")
+        r = crawler(self.__url).rget()
+        j = r.json()
+        bar = tqdm(total=len(j), desc="Getting all countries' metadata from WolfPop", unit="country")
+        for x in j:
+            bar.update()
+            if x["popyear"] != str(year): continue
             x.pop("desc", "file_image")
             x.pop("file_html")
             self.__indexC.append(x["country"])
+            self.__countries.append(x)
+
+        bar.close()
 
         return
     
-    def downloadAll(self, savePath: str):
-        for i in self.__countries:
-            self.downloadOneCountry(savePath, id=i["id"])
+    def downloadAll(self, savePath: str, maxThread: int = 1):
+        futures = []
+        futureDict = {}
+        with ProcessPoolExecutor(max_workers=maxThread) as executor:
+            for i in self.__countries:
+                future = executor.submit(self.downloadOneCountry, savePath, id=i["id"])
+                futures.append(future)
+                futureDict[future] = i["country"]
+
+            for future in as_completed(futures):
+                c = futureDict[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    tqdm.write(f"{c}: {e}")
 
         return
 
@@ -61,8 +79,7 @@ class globalPopulation(crawler):
             return False
         
         url = "https://hub.worldpop.org/geodata/summary?id={}".format(id)
-        super().__init__(url)
-        r = self.rget()
+        r = crawler(url).rget()
         r.encoding = "utf-8"
 
         # Get all population file
@@ -91,14 +108,14 @@ class globalPopulation(crawler):
             if not isinstance(i, Tag):
                 continue
             downloadUrl = i["href"]
-            if not isinstance(downloadUrl, str):
-                continue
+            if not isinstance(downloadUrl, str): continue
+            # if str(year) != downloadUrl.split("/")[7]: continue
             filename = downloadUrl.split("/")[-1]
             if filename in existFile:
-                continue
+                if os.path.getsize(os.path.join(savePath2, filename)) == 0: continue
+                else: os.remove(os.path.join(savePath2, filename))
             # Download
-            super().__init__(downloadUrl)
-            self.download(os.path.join(savePath2, filename), multi=False)
+            crawler(downloadUrl).download(os.path.join(savePath2, filename), multi=False)
         
         # Save meta data
         pd.DataFrame(meta).to_csv(os.path.join(savePath2, "{}_metadata.csv".format(iso)), encoding="utf-8")
@@ -116,12 +133,11 @@ class globalPopulation(crawler):
                 file = fileName.format(iso.lower(), g, a)
                 if file in existFile:
                     continue
-                super().__init__(url.format(iso.upper(), file))
-                self.download(os.path.join(savePath, file), multi=False)
+                crawler(url.format(iso.upper(), file)).download(os.path.join(savePath, file), multi=False)
 
 if __name__ == "__main__":
     DOWN_POP = os.path.join("..", "_Data", "globalPopulation")
     a = globalPopulation()
     # for country in ["USA"]:
     #     a.downloadOneCountryByISO(os.path.join("C:\\0_PolyU\\population2_tmp", country), country)
-    a.downloadAll(DOWN_POP)
+    a.downloadAll(DOWN_POP, 24)
