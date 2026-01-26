@@ -15,7 +15,7 @@ from analysis.relationAnalysis import relationAnalysis
 
 def popAndPOIAnalysis(
     path: str, analysisType: str,
-    savePath: str, axs: Axes | None = None,
+    savePath: str,
     accOrEquity: str = "accessibility",
     minEvcsNum: int = 0
 ) -> None:
@@ -29,7 +29,7 @@ def popAndPOIAnalysis(
         between gender demograph, age demograph and all population. 'popDynamic' analysis the relatiopship
         between all static population and all dynaic population.
     """
-    A_BEFORE, A_AFTER = AColumns(analysisType, accOrEquity)
+    A_BEFORE, A_AFTER = AColumns(analysisType, accOrEquity, 0)
 
     df, n, nc = readNode(path, minEvcsNum)
     scale = os.path.basename(path).split('.')[0]
@@ -44,7 +44,7 @@ def popAndPOIAnalysis(
     
     # Save change ratio
     print("\n")
-    df.to_csv(os.path.join(savePath, f"{scale}_{accOrEquity}_results.csv"))
+    
     # Plot
     subplot = plt.subplot("WN31", 1, 3, widthRatios=[3, 1, 5])
     # ax1 = subplot.axs[1] # Non zero ECDF

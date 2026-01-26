@@ -48,7 +48,6 @@ class rfRegressor(autoCorrelation):
             shapValue = explainer.shap_values(X)
             print(ycol)
             shap.summary_plot(shapValue, X, title=ycol)
-            shap.dependence_plot("EVCSDensity", shapValue, X, interaction_index=None)
 
         return
 
@@ -59,13 +58,13 @@ if __name__ == "__main__":
     INDICATOR = os.path.join(root, "indicator.gpkg")
 
     FloodingRegCol = [
-        "EVCScoverage", "EVCSDensity",
-        "roadDensity", "roadCoverage",
+        "EVCScoverage", 
+        "roadCoverage",
         "populationDensity", "populationCV",
         "folldingCoverage"
     ]
     
-    a = rfRegressor(CITY_RESULT, INDICATOR, FloodingRegCol, checkCorelation=False)
-    a.dropCorelation({"roadDensity", "EVCScoverage"}, checkCorelation=False)
+    a = rfRegressor(CITY_RESULT, INDICATOR, FloodingRegCol, checkCorelation=True)
+    a.dropCorelation({"EVCScoverage"}, checkCorelation=True)
     # a.spatialAuto()
     a.rfRegression()

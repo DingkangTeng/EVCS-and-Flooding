@@ -23,7 +23,7 @@ def calRatio(
     nonZeroCounts = ndarray([len(colsBefore)], dtype=uint16)
 
     for i, a in enumerate(colsBefore):
-        col = "{}_changeresultCols".format(a)
+        col = "{}_change".format(a)
         resultCols[i] = col
         df[col] = (df[colsAfter[i]] / df[a] - 1) * 100
         allRecord = df[df[col].notna()]

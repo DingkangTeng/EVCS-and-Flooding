@@ -7,7 +7,8 @@ from tqdm import tqdm
 sys.path.append(".") # Set path to the roots
 
 from analysis.__readNode import readNode
-from analysis.__setting import A, POP_DICT
+from analysis.__calRatio import calRatio
+from analysis.__setting import A, POP_DICT, AColumns
 
 class calUpperLevel:
     __slots__ = ["df", "n", "nc", "savePath"]
@@ -27,7 +28,7 @@ class calUpperLevel:
 
         return
 
-    def agg(self, aggType: str, maxThread: int = 1) -> None:
+    def agg(self, aggType: str, minEvcsNum: int = 10, maxThread: int = 1) -> None:
         df = self.df.groupby(["city", "iso3"] if aggType == "city" else aggType).sum(numeric_only=True).reset_index()
         for col in A: 
             df[col] /= df[POP_DICT[col]]
@@ -37,10 +38,10 @@ class calUpperLevel:
             cityDict = dict(self.df[["city", "iso3"]].drop_duplicates().values)
             df["iso3"] = df["city"].map(cityDict)
 
-        df.to_csv(
-            os.path.join(self.savePath, "{}.csv".format(aggType)),
-            encoding="utf-8", index=False
-        )
+        savePath = os.path.join(self.savePath, "{}.csv".format(aggType))
+        df.to_csv(savePath, encoding="utf-8", index=False)
+
+        self.calculateChangeRatio(savePath, minEvcsNum)
 
         return
     
@@ -58,38 +59,38 @@ class calUpperLevel:
 
         futures = []
         futuresDict = {}
-        executor = ProcessPoolExecutor(max_workers=maxThread)
-        for i, group in grouped:
-            # Either population or accessibility arrays are empty
-            if group.empty:
-                bar.update()
-                continue
+        with ProcessPoolExecutor(max_workers=maxThread) as executor:
+            for i, group in grouped:
+                # Either population or accessibility arrays are empty
+                if group.empty:
+                    bar.update()
+                    continue
 
-            acc = np.asarray(group[col].values)
-            pop = np.asarray(group[POP_DICT[col]].values)
+                acc = np.asarray(group[col].values)
+                pop = np.asarray(group[POP_DICT[col]].values)
 
-            # Filter out areas with zero population
-            mask = pop > 0
-            pop = pop[mask]
-            acc = acc[mask]
+                # Filter out areas with zero population
+                mask = pop > 0
+                pop = pop[mask]
+                acc = acc[mask]
 
-            if len(acc) == 0 or len(pop) == 0:
-                bar.update()
-                continue
+                if len(acc) == 0 or len(pop) == 0:
+                    bar.update()
+                    continue
+                
+                future = executor.submit(self.gini, pop, acc)
+                futures.append(future)
+                futuresDict[future] = i
             
-            future = executor.submit(self.gini, pop, acc)
-            futures.append(future)
-            futuresDict[future] = i
-        
-        for future in as_completed(futures):
-            i = futuresDict[future]
-            try: gini = future.result()
-            except Exception as e:
-                raise RuntimeError(e)
-            else:
-                # Ensure the result is within [0, 1] bounds
-                result.at[i, resultCol] = max(0, min(gini, 1))
-                bar.update()
+            for future in as_completed(futures):
+                i = futuresDict[future]
+                try: gini = future.result()
+                except Exception as e:
+                    raise RuntimeError(e)
+                else:
+                    # Ensure the result is within [0, 1] bounds
+                    result.at[i, resultCol] = max(0, min(gini, 1))
+                    bar.update()
         
         bar.close()
 
@@ -119,8 +120,27 @@ class calUpperLevel:
 
         # Compute the Gini coefficient using the trapezoidal rule (Lorenz curve area)
         return 1 - np.trapezoid(cumAcc, cumPop)
+    
+    @staticmethod
+    def calculateChangeRatio(path: str, minEvcsNum: int = 10) -> None:
+        dfs, n, nc = readNode(path, minEvcsNum)
+        savePath = os.path.dirname(path)
+
+        result = []
+        A_BEFORE, A_AFTERs = AColumns("all", "all", 3)
+        sub = ["all", "EVCSOnly", "RoadsOnly"]
+        for i, A_AFTER in enumerate(A_AFTERs):
+            df, cols = calRatio(dfs[["iso3", "city"] + A_BEFORE + A_AFTER].copy(), A_BEFORE, A_AFTER, False, False)
+            df.rename(columns={x: f"{x}_{sub[i]}" for x in cols}, inplace=True)
+            result.append(df)
+
+        result = pd.concat(result, axis=1)
+        result = result.loc[:, ~result.columns.duplicated()]
+        result.to_csv(os.path.join(savePath, "changeRatio_result.csv"), encoding="utf-8", index=False)
+
+        return
 
 if __name__ == "__main__":
-    a = calUpperLevel(r"C:\\0_PolyU\\test\\merge_5km.parquet", r"C:\\0_PolyU\\test", 10, "city")
-    a.agg("city", 16)
-    a.agg("iso3", 16)
+    ANALY_RESULT = r"C:\0_PolyU\test\3km"
+    MERGE_RESULT = r"C:\0_PolyU\test\merge_3km.parquet"
+    calUpperLevel(MERGE_RESULT, ANALY_RESULT, 10, "city").agg("city", 16)

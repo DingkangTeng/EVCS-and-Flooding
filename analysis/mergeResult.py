@@ -8,14 +8,15 @@ sys.path.append(".") # Set path to the roots
 from _function.readFiles import loadJsonRecord
 
 class mergeData:
-    __slots__ = ["roadsPath", "countries", "boundary"]
+    __slots__ = ["roadsPath", "countries", "boundary", "d0"]
 
-    def __init__(self, roadsPath: str, boundaryPath: str | tuple[str, str], boundaryCols: tuple[str, str]) -> None:
+    def __init__(self, roadsPath: str, boundaryPath: str | tuple[str, str], boundaryCols: tuple[str, str], d0: int = 3000) -> None:
         self.roadsPath = roadsPath
         self.countries = loadJsonRecord(
             os.path.join(roadsPath, "log.json"),
-            "M2SFCA"
+            "M2SFCA_{}".format(d0)
         ).get()
+        self.d0 = d0 // 1000
 
         if isinstance(boundaryPath, str):
             self.boundary = gpd.read_file(boundaryPath, encoding="utf-8", usecols=list(boundaryCols) + ["geometry"])
@@ -90,10 +91,11 @@ class mergeData:
             dfs[i-skip] = nodes
             bar.update()
         
-        dfs = dfs[0: -skip]
+        dfs = dfs[0: -skip] if skip != 0 else dfs
         df = gpd.pd.concat(dfs)
 
         # Delete city having no flooding affected record
+        df.loc[df["EVCSNum"].notna() & df["EVCSNum_After"].isna(), "EVCSNum_After"] = 0 # Fill na EVCSNum After
         df["EVCSChange"] = df["EVCSNum_After"] / df["EVCSNum"] * 100 - 100
         cityStats = df.groupby("city").agg({
             "affected": "sum",
@@ -103,20 +105,21 @@ class mergeData:
             (cityStats["affected"] == 0) & 
             (cityStats["EVCSChange"] == 0)
         ]["city"].tolist()
-        df = df[(~df["city"].isin(cityStats)) & (~df['type'].str.contains('waterbody', case=False, na=False))]
+        df = df[(~df["city"].isin(cityStats)) & (~df["city"].str.contains("waterbody", case=False, na=False))]
 
         gpd.GeoDataFrame(df, crs=dfs[0].crs).to_file(
-            os.path.join(savePath, "merge.gpkg"),
+            os.path.join(savePath, "merge_{}km.gpkg".format(self.d0)),
             layer="nodes",
             encoding="utf-8"
         )
-        # Save data individually for quickly access 
-        df.drop(columns=["geometry"]).to_parquet(os.path.join(savePath, "merge.parquet"), compression="gzip")
+        # Save data individually for quickly access
+        parquetPath = os.path.join(savePath, "merge_{}km.parquet".format(self.d0))
+        df.drop(columns=["geometry"]).to_parquet(parquetPath, compression="gzip")
 
         return
 
 # Debug
 if __name__ == "__main__":
-    a = mergeData("C:\\0_PolyU\\roadsGraph", (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"), ("iso3_code", "disp_en"))
-    a.mergeAll("C:\\0_PolyU\\test")
-    
+    mergeData(
+        "C:\\0_PolyU\\roadsGraph", (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"), ("iso3_code", "disp_en"), 3000
+    ).mergeAll("C:\\0_PolyU\\test")
