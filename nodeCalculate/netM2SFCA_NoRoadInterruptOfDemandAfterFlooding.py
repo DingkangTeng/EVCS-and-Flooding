@@ -67,14 +67,16 @@ class M2SFCA:
             return
         nodes = nodes[NODES_ATTR + demand]
 
-        edges = gpd.read_file(file, layer="edges", encoding="utf-8").set_index(['u', 'v', "key"])[EDGES_ATTR]
-        if after:
-            edges = edges[edges["affected"] == 0]
+        edges = gpd.read_file(file, layer="edges", encoding="utf-8").set_index(['u', 'v', "key"])[EDGES_ATTR]   
         
         self.SupplyNodesIndex = nodes[self.getBool(nodes, SUPPLY_COLS)].index.to_numpy()
         self.DemandNodesIndex = nodes[self.getBool(nodes, demand)].index.to_numpy()
         self.G = convert.graph_from_gdfs(nodes, edges)
-        self.GReversed = self.G.reverse()
+        if after:
+            edges = edges[edges["affected"] == 0]
+            self.GReversed = convert.graph_from_gdfs(nodes, edges).reverse()
+        else:
+            self.GReversed = self.G.reverse()
         self.afterG = after
 
         del nodes, edges
@@ -269,4 +271,14 @@ if __name__ == "__main__":
     # a = M2SFCA(r"C:\0_PolyU\roadsGraph_BeijinInner\CHN.gpkg")
     # a.calOneLayer(1000, "Gaussian", "population_All") # type: ignore
     # a.calOneLayer(1000, "Gaussian", "population_All", after=True, maxThreads=os.cpu_count()) # type: ignore
-    calAllLayer(r"C:\\0_PolyU\\roadsGraph", 3000, "Gaussian")
+    D0 = 3000
+    calAllLayer(r"C:\\0_PolyU\\roadsGraph", D0, "Gaussian")
+
+    from analysis import mergeData, calUpperLevel
+    mergeData(
+        "C:\\0_PolyU\\roadsGraph", (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"), ("iso3_code", "disp_en"), D0
+    ).mergeAll("C:\\0_PolyU\\test")
+
+    ANALY_RESULT = r"C:\0_PolyU\test2\3km"
+    MERGE_RESULT = r"C:\0_PolyU\test2\merge_3km.parquet"
+    calUpperLevel(MERGE_RESULT, ANALY_RESULT, 10, "city").agg("city", 16)

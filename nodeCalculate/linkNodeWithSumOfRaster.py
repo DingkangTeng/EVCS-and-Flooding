@@ -147,10 +147,10 @@ class linkNodeWithSumOfRaster:
             cache: bool = True
         ) -> tuple[np.ndarray | None, int | None]:
 
-        if fieldName in dataNode.columns:
-            if dataNode[fieldName].sum() != 0:
-                tqdm.write("{} has already been processed.".format(fieldName))
-                return None, None
+        # if fieldName in dataNode.columns:
+        #     if dataNode[fieldName].sum() != 0:
+        #         tqdm.write("{} has already been processed.".format(fieldName))
+        #         return None, None
         
         pixelSums = np.zeros(dataNode.shape[0], dtype=np.float64)
         name = os.path.basename(raster)
@@ -281,6 +281,7 @@ class linkNodeWithSumOfRaster:
 
     def processAll(self, pathGpke: str, tifRootPath: str, tifsFolderName: str, cache: bool = True) -> None:
         allGpkgs = readFiles(pathGpke).specificFile(suffix=["gpkg"])
+        allGpkgs.sort()
         totalBar = tqdm(total=len(allGpkgs), desc="Processing countries", unit="country")
         # Update log
         log = loadJsonRecord(os.path.join(pathGpke, "log.json"), "populationRaster", {})
@@ -294,12 +295,16 @@ class linkNodeWithSumOfRaster:
             for tifs in readFiles(tifRootPath).specificFloder(contains=[tifsFolderName]):
                 tifsPath = os.path.join(tifRootPath, tifs)
                 tif = readFiles(tifsPath).specificFile(suffix=["tif"], contains=[countryName])
+                # No tif data
                 if len(tif) == 0:
                     noData = "No corresponding tif file for {} in {}".format(countryName, tifsPath)
                     tqdm.write(noData)
                     processedRaster.append(noData)
                     continue
+
+                # Process tif
                 tif = tif[0]
+                if tif in processedRaster: continue
                 tifDict[tif] = (tifsPath, tifs) # tifs looks like population_All / population_All_children ...
             nodeName, processedRaster = self.processOneLayer((path, "nodes"), tifDict, processedRaster, cache)
 
@@ -384,7 +389,7 @@ if __name__ == "__main__":
     #     os.cpu_count()  # type: ignore
     # )
 
-    # linkNodeWithSumOfRaster(maxThread=16).processAll(r"C:\\0_PolyU\\roadsGraph", r"C:\\0_PolyU", r"population_")
+    linkNodeWithSumOfRaster(maxThread=4, blockSize=8192).processAll(r"C:\\0_PolyU\\roadsGraph", r"D:\Population_Related\global_2025", r"population_")
     # rasterDict = {
     #     "JPN_allGender_[60, 65, 70, 75, 80]_merge.tif": (r"C:\0_PolyU\population_All_elderly", "population_All_elderly2"),
     #     "JPN_allGender_allAge_merge.tif": (r"C:\0_PolyU\population_All", "population_All"),
@@ -397,11 +402,11 @@ if __name__ == "__main__":
     # linkNodeWithSumOfRaster(maxThread=16, blockSize=1500).processOneLayer((r"C:\\0_PolyU\\test\\JPN.gpkg", "nodes"), rasterDict, [])
 
     # No corresponding population:
-    # JEY, GIB, GGY, ALA, IOT, CXR, PCN, ATF, SJM, XKX, NFK
+    # IOT, ATF
 
-    linkNodeWithSumOfRaster(maxThread=16).processWithOneTif(
-        r"C:\\0_PolyU\\roadsGraph",
-        r"C:\\0_PolyU\\landscan-global-2024-assets\\landscan-global-2024.tif",
-        (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"),
-        "iso3_code"
-    )
+    # linkNodeWithSumOfRaster(maxThread=16).processWithOneTif(
+    #     r"C:\\0_PolyU\\roadsGraph",
+    #     r"C:\\0_PolyU\\landscan-global-2024-assets\\landscan-global-2024.tif",
+    #     (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"),
+    #     "iso3_code"
+    # )

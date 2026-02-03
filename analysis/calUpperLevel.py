@@ -14,7 +14,7 @@ class calUpperLevel:
     __slots__ = ["df", "n", "nc", "savePath"]
     
     def __init__(self, path: str, savePath: str, minEvcsNum: int = 10, filterBy: str = "city") -> None:
-        self.df, self.n, self.nc = readNode(path, minEvcsNum, filterBy, ignoreUneffected=True, ignoreIsolate=False)
+        self.df, self.n, self.nc = readNode(path, minEvcsNum, filterBy, ignoreUneffected=True)
         self.savePath = savePath
         columns = self.df.columns
 
@@ -28,8 +28,9 @@ class calUpperLevel:
 
         return
 
-    def agg(self, aggType: str, minEvcsNum: int = 10, maxThread: int = 1) -> None:
+    def agg(self, aggType: str, maxThread: int = 1) -> None:
         df = self.df.groupby(["city", "iso3"] if aggType == "city" else aggType).sum(numeric_only=True).reset_index()
+        df["EVCSChange"] = df["EVCSNum_After"] / df["EVCSNum"] * 100 - 100
         for col in A: 
             df[col] /= df[POP_DICT[col]]
             df = df.join(self.calculateGini(col, aggType, maxThread), on=aggType)
@@ -41,7 +42,7 @@ class calUpperLevel:
         savePath = os.path.join(self.savePath, "{}.csv".format(aggType))
         df.to_csv(savePath, encoding="utf-8", index=False)
 
-        self.calculateChangeRatio(savePath, minEvcsNum)
+        self.calculateChangeRatio(savePath, df)
 
         return
     
@@ -122,8 +123,8 @@ class calUpperLevel:
         return 1 - np.trapezoid(cumAcc, cumPop)
     
     @staticmethod
-    def calculateChangeRatio(path: str, minEvcsNum: int = 10) -> None:
-        dfs, n, nc = readNode(path, minEvcsNum)
+    def calculateChangeRatio(path: str, df: pd.DataFrame | None = None) -> None:
+        dfs = pd.read_csv(path, encoding="utf-8") if df is None else df
         savePath = os.path.dirname(path)
 
         result = []

@@ -4,7 +4,7 @@ import pandas as pd
 from bs4 import BeautifulSoup as bs
 from bs4 import Tag
 from tqdm import tqdm
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 sys.path.append(".") # Set path to the roots
 
@@ -50,24 +50,28 @@ class globalPopulation:
         return
     
     def downloadAll(self, savePath: str, maxThread: int = 1):
-        futures = []
-        futureDict = {}
-        with ProcessPoolExecutor(max_workers=maxThread) as executor:
-            for i in self.__countries:
-                future = executor.submit(self.downloadOneCountry, savePath, id=i["id"])
-                futures.append(future)
-                futureDict[future] = i["country"]
+        if maxThread != 0:
+            futures = []
+            futureDict = {}
+            with ProcessPoolExecutor(max_workers=maxThread) as executor:
+                for i in self.__countries:
+                    future = executor.submit(self.downloadOneCountry, savePath, id=i["id"])
+                    futures.append(future)
+                    futureDict[future] = i["country"]
 
-            for future in as_completed(futures):
-                c = futureDict[future]
-                try:
-                    future.result()
-                except Exception as e:
-                    tqdm.write(f"{c}: {e}")
+                for future in as_completed(futures):
+                    c = futureDict[future]
+                    try:
+                        future.result()
+                    except Exception as e:
+                        tqdm.write(f"{c}: {e}")
+        else:
+            for i in self.__countries:
+                self.downloadOneCountry(savePath, id=i["id"], maxThread=os.cpu_count())
 
         return
 
-    def downloadOneCountry(self, savePath: str, id: str = "", country: str = "") -> bool:
+    def downloadOneCountry(self, savePath: str, id: str = "", country: str = "", maxThread: int | None = None) -> bool:
         # Get id by country name
         meta = {}
         if id == "" and country in self.__indexC:
@@ -104,6 +108,11 @@ class globalPopulation:
         savePath2 = os.path.join(savePath, iso)
         mkdir(savePath2)
         existFile = readFiles(savePath2).specificFile(suffix=["tif"])
+
+        if maxThread is not None:
+            futures = []
+            executor = ProcessPoolExecutor(max_workers=maxThread)
+
         for i in a:
             if not isinstance(i, Tag):
                 continue
@@ -112,10 +121,20 @@ class globalPopulation:
             # if str(year) != downloadUrl.split("/")[7]: continue
             filename = downloadUrl.split("/")[-1]
             if filename in existFile:
-                if os.path.getsize(os.path.join(savePath2, filename)) == 0: continue
+                if os.path.getsize(os.path.join(savePath2, filename)) != 0: continue
                 else: os.remove(os.path.join(savePath2, filename))
             # Download
-            crawler(downloadUrl).download(os.path.join(savePath2, filename), multi=False)
+            if maxThread is None:
+                crawler(downloadUrl).download(os.path.join(savePath2, filename), multi=False)
+            else:
+                c = crawler(downloadUrl)
+                futures.append( # type: ignore
+                    executor.submit(c.download, os.path.join(savePath2, filename), multi=False) # type: ignore
+                )
+        
+        if maxThread is not None:
+            for _ in as_completed(futures): continue # type: ignore
+            executor.shutdown() # type: ignore
         
         # Save meta data
         pd.DataFrame(meta).to_csv(os.path.join(savePath2, "{}_metadata.csv".format(iso)), encoding="utf-8")
@@ -136,8 +155,8 @@ class globalPopulation:
                 crawler(url.format(iso.upper(), file)).download(os.path.join(savePath, file), multi=False)
 
 if __name__ == "__main__":
-    DOWN_POP = os.path.join("..", "_Data", "globalPopulation")
+    DOWN_POP = r"D:\Population_Related\global_2025\population"
     a = globalPopulation()
     # for country in ["USA"]:
     #     a.downloadOneCountryByISO(os.path.join("C:\\0_PolyU\\population2_tmp", country), country)
-    a.downloadAll(DOWN_POP, 24)
+    a.downloadAll(DOWN_POP, 0)
