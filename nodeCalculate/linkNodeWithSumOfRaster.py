@@ -1,4 +1,4 @@
-import sys, sqlite3, os, time, psutil, gc, random, threading
+import sys, sqlite3, os, time, psutil, gc, random
 import pandas as pd
 import geopandas as gpd
 import numpy as np
@@ -17,12 +17,11 @@ from _function.readFiles import readFiles, loadJsonRecord, mkdir
 from _function.constant import GiB
 
 class linkNodeWithSumOfRaster:
-    __slots__ = ["BLOCK_SIZE_INIT", "THREAD_NUM", "lock"]
+    __slots__ = ["BLOCK_SIZE_INIT", "THREAD_NUM"]
 
     def __init__(self, blockSize: int = 4096, maxThread: int = 1) -> None:
         self.BLOCK_SIZE_INIT = blockSize
         self.THREAD_NUM = maxThread
-        self.lock = threading.Lock()
 
     @staticmethod
     def updateData(path: str, df: pd.DataFrame, fieldName: str) -> None:
@@ -47,6 +46,9 @@ class linkNodeWithSumOfRaster:
             """
         )
         cursor.execute("DROP TABLE IF EXISTS tempTable")
+        conn.commit()
+        # Clean cache
+        conn.execute("VACUUM")
         conn.commit()
         conn.close()
         del df
@@ -144,13 +146,13 @@ class linkNodeWithSumOfRaster:
             tree: KDTree | None, dataNode: gpd.GeoDataFrame, fieldName: str, indicesDict: dict[tuple[int, int], np.intp],
             raster: str, BLOCK_SIZE: int = 4096,
             maxDistance: int | None = None,
-            cache: bool = True
+            cache: bool = True, skipExist: bool = False
         ) -> tuple[np.ndarray | None, int | None]:
 
-        # if fieldName in dataNode.columns:
-        #     if dataNode[fieldName].sum() != 0:
-        #         tqdm.write("{} has already been processed.".format(fieldName))
-        #         return None, None
+        if skipExist and fieldName in dataNode.columns:
+            if dataNode[fieldName].sum() != 0:
+                tqdm.write("{} has already been processed.".format(fieldName))
+                return None, None
         
         pixelSums = np.zeros(dataNode.shape[0], dtype=np.float64)
         name = os.path.basename(raster)
@@ -193,15 +195,14 @@ class linkNodeWithSumOfRaster:
                 else:
                     pixelSums += sums
                     # Clean cache when memeory is less than 1 gib
-                    with self.lock:
-                        if psutil.virtual_memory().available < GiB:
-                            tqdm.write("Out of memory, clean cache.")
-                            indicesDict.clear()
-                            time.sleep(0.1)
-                            gc.collect()
-                        # Only save caches when memory larger than 8 gib
-                        if psutil.virtual_memory().available > BLOCK_SIZE * BLOCK_SIZE * 32 * self.THREAD_NUM and cache: # type: ignore
-                            indicesDict[ij] = indices
+                    if psutil.virtual_memory().available < GiB and cache:
+                        tqdm.write("Out of memory, clean cache.")
+                        indicesDict.clear()
+                        time.sleep(0.1)
+                        gc.collect()
+                    # Only save caches when memory larger than 8 gib
+                    if psutil.virtual_memory().available > BLOCK_SIZE * BLOCK_SIZE * 32 * self.THREAD_NUM and cache: # type: ignore
+                        indicesDict[ij] = indices
                     futures.remove(future)
                     gc.collect()
                     bar.update(1)
@@ -235,6 +236,15 @@ class linkNodeWithSumOfRaster:
             for i in processedRaster:
                 rasterSet.discard(i)
             tqdm.write("The following rasters for \"{}\" have already been processed and skipped: \n{}".format(nodeName, processedRaster))
+            # Check simalirity
+            simalirity = set()
+            for i in rastersDict:
+                with rio.open(os.path.join(rastersDict[i][0], i), options=["NUM_THREADS=ALL_CPUS"]) as src:
+                    width, height = src.width, src.height
+                    simalirity.add((width, height))
+            if len(simalirity) != 1:
+                cache = False
+
         if len(rasterSet) == 0:
             tqdm.write("{} have already been processed and skipped.".format(nodeName))
             return nodeName, processedRaster
@@ -266,13 +276,19 @@ class linkNodeWithSumOfRaster:
             )
 
         for raster in rasterSet:
-            if indicesDict != {} and len(indicesDict) == totalChunk:
+            if "['f']_allAge" in raster or "['m']_allAge" in raster:
+                indicesDict2 = {}
+                cache2 = False
+            else:
+                indicesDict2 = indicesDict
+                cache2 = cache
+            if indicesDict2 != {} and len(indicesDict2) == totalChunk:
                 tree = None
                 gc.collect()
                 tqdm.write("All corresponding points have been cached, the tree is deleted to release memeory.")
             rasterRoot, fieldName = rastersDict[raster]
             rasterPath = os.path.join(rasterRoot, raster)
-            results, totalChunk = self.readOneTif(tree, dataNode, fieldName, indicesDict, rasterPath, BLOCK_SIZE, cache=cache)
+            results, totalChunk = self.readOneTif(tree, dataNode, fieldName, indicesDict2, rasterPath, BLOCK_SIZE, cache=cache2)
             if not results is None:
                 self.updateData(path, pd.DataFrame(results, columns=["nodesFid", fieldName]), rastersDict[raster][1])
             processedRaster.append(os.path.basename(raster))
@@ -389,7 +405,23 @@ if __name__ == "__main__":
     #     os.cpu_count()  # type: ignore
     # )
 
-    linkNodeWithSumOfRaster(maxThread=4, blockSize=8192).processAll(r"C:\\0_PolyU\\roadsGraph", r"D:\Population_Related\global_2025", r"population_")
+    # linkNodeWithSumOfRaster(maxThread=32).processAll(r"C:\\0_PolyU\\roadsGraph", r"D:\Population_Related\global_2025", r"population_Female", cache=False)
+    linkNodeWithSumOfRaster(maxThread=32).processAll(r"C:\\0_PolyU\\roadsGraph", r"D:\Population_Related\global_2025", r"population_Male", cache=False)
+
+    from analysis import mergeData, calUpperLevel
+    from nodeCalculate import M2SFCA_CalAllLayer
+
+    D0 = 3000
+    M2SFCA_CalAllLayer(r"C:\\0_PolyU\\roadsGraph", D0, "Gaussian")
+
+    mergeData(
+        "C:\\0_PolyU\\roadsGraph", (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"), ("iso3_code", "disp_en"), D0
+    ).mergeAll("C:\\0_PolyU\\test")
+
+    ANALY_RESULT = r"C:\0_PolyU\test\3km"
+    MERGE_RESULT = r"C:\0_PolyU\test\merge_3km.parquet"
+    calUpperLevel(MERGE_RESULT, ANALY_RESULT, 10, "city").agg("city", 16)
+
     # rasterDict = {
     #     "JPN_allGender_[60, 65, 70, 75, 80]_merge.tif": (r"C:\0_PolyU\population_All_elderly", "population_All_elderly2"),
     #     "JPN_allGender_allAge_merge.tif": (r"C:\0_PolyU\population_All", "population_All"),

@@ -134,15 +134,12 @@ if __name__ == "__main__":
     files = readFiles.readFiles(r"C:\0_PolyU\roadsGraph").specificFile(["gpkg"])
     files.sort()
     bar = tqdm(total=len(files))
-    for x in files[:9]:
+    for x in files:
         bar.set_description(x)
-        # columns = gpd.read_file(r"C:\\0_PolyU\\roadsGraph\\" + x, layer="nodes").columns.to_list()
-        # lista = [x for x in columns if x[:2] == "R_"]
         conn = sqlite3.connect(r"C:\\0_PolyU\\roadsGraph\\" + x, factory=spatialiteConnection)
         conn.loadSpatialite() # Load spatialite extension
         cursor = conn.cursor(factory=modifyTable)
-        cursor.dropFields("nodes", "A_POI", "A_POI_After")
-        # cursor.dropIndex("nodes", "EVCSNum", "EVCSNum_After")
+        cursor.execute("VACUUM")
         conn.commit()
         conn.close()
         bar.update()

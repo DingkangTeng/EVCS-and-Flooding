@@ -98,10 +98,11 @@ class calUpperLevel:
         return result
     
     @staticmethod
-    def gini(pop: np.ndarray, acc:np.ndarray) -> float:
+    def gini(pop: np.ndarray, acc:np.ndarray) -> np.floating:
         # Special case: if only one grid cell has nonzero accessibility
         # Return 0 if all population entries were filtered out
-        if np.count_nonzero(acc) == 1: return 1
+        if np.count_nonzero(acc) == 0: return np.float16(0)
+        elif np.count_nonzero(acc) == 1: return np.float16(1)
 
         # Sort values by accessibility in ascending order
         sortedIndices = np.argsort(acc)
@@ -112,15 +113,16 @@ class calUpperLevel:
         totalPop = sortedPop.sum()
         totalAcc = sortedAcc.sum()
 
-        if totalPop == 0 or totalAcc == 0:
-            return 0.0
-
         # Normalize cumulative population and accessibility (range 0–1)
         cumPop = np.cumsum(sortedPop) / totalPop
         cumAcc = np.cumsum(sortedAcc) / totalAcc
+        ## Add 0
+        lack0 = cumPop[0] != 0 or cumAcc[0] != 0
+        cumPop = np.insert(cumPop, 0, 0) if lack0 else cumPop
+        cumAcc = np.insert(cumAcc, 0, 0) if lack0 else cumAcc
 
         # Compute the Gini coefficient using the trapezoidal rule (Lorenz curve area)
-        return 1 - np.trapezoid(cumAcc, cumPop)
+        return np.float64(1 - np.trapezoid(cumAcc, cumPop))
     
     @staticmethod
     def calculateChangeRatio(path: str, df: pd.DataFrame | None = None) -> None:

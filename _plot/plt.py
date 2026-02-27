@@ -19,19 +19,21 @@ from matplotlib.pyplot import (
 )
 
 # Print or save fig
-def plot(path: str = "", saveName: str = "", **kwgs) -> None:
+def plot(path: str = "", saveName: str = "", fig: Figure | None = None, **kwgs) -> None:
     from os.path import join
-    plt.tight_layout()
+    fig = fig if fig is not None else plt.gcf()
+    
+    fig.tight_layout()
 
     if path == "":
-        plt.show()
+        fig.show()
     else:
-        plt.savefig(
+        fig.savefig(
             join(path, "defaultName.jpg") if saveName == "" else join(path, saveName),
             **kwgs
         )
 
-    return plt.close()
+    return plt.close(fig)
 
 # Initial fig
 def figure(figsize: str) -> tuple[Figure, Axes]:
@@ -42,7 +44,7 @@ def figure(figsize: str) -> tuple[Figure, Axes]:
 
 # Initial subplot in one fig
 class subplot:
-    __slots__ = ["__fig", "__axs"]
+    __slots__ = ["__fig", "__axs", "sharex", "sharey", "xy"]
 
     def __init__(
         self,
@@ -56,9 +58,13 @@ class subplot:
         from matplotlib.gridspec import GridSpec
 
         self.__fig = plt.figure(figsize=getattr(FIG_SIZE, figsize))
+        self.sharex = sharex
+        self.sharey = sharey
+        self.xy = (x, y, legend)
+
         if legend:
             if heightRatios is not None:
-                heightRatios = heightRatios + [max(1, sum(heightRatios)//9)]
+                heightRatios = heightRatios + [0]
             else:
                 heightRatios = [max(1, 8//y)] * y + [1]
             gs = GridSpec(y+1, x, height_ratios=heightRatios, width_ratios=widthRatios)
@@ -87,11 +93,22 @@ class subplot:
 
     @property
     def fig(self) -> Figure:
+        # Delete inner axis name
+        if self.sharex:
+            for ax in self.__axs[:-self.xy[0]*(self.xy[2]+1)]:
+                ax.set_xlabel("")
+        if self.sharey:
+            for ax in [x for i, x in enumerate(self.__axs) if i % self.xy[0] != 0]:
+                ax.set_ylabel("")
+
         return self.__fig
     
     @property
     def axs(self) -> list[Axes]:
         return self.__axs
+    
+    def plot(self, path: str = "", saveName: str = "", **kwgs) -> None:
+        plot(path, saveName, self.__fig, **kwgs)
     
 # Change axis name
 def standAxisName(ax: Axes, axis: str, standard: dict) -> None:

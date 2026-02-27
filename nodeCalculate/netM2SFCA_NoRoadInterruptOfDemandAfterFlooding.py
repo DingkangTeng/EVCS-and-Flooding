@@ -279,6 +279,6 @@ if __name__ == "__main__":
         "C:\\0_PolyU\\roadsGraph", (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"), ("iso3_code", "disp_en"), D0
     ).mergeAll("C:\\0_PolyU\\test")
 
-    ANALY_RESULT = r"C:\0_PolyU\test2\3km"
-    MERGE_RESULT = r"C:\0_PolyU\test2\merge_3km.parquet"
+    ANALY_RESULT = r"C:\0_PolyU\test\3km"
+    MERGE_RESULT = r"C:\0_PolyU\test\merge_3km.parquet"
     calUpperLevel(MERGE_RESULT, ANALY_RESULT, 10, "city").agg("city", 16)

@@ -19,41 +19,41 @@ ALL_AGE_LIST = [x for x in range(0, 91, 5)] + [1]
 
 class populationMerge(floodingMerge):
 
-    @staticmethod
-    def copy(downloadPath: str, savePath: str, types: str = 'm') -> None:
-        if types == "m":
-            downloadFilename = "{}_T_M_2025_CN_100m_R2025A_v1.tif"
-            saveFilename = "{}_['m']_allAge_merge.tif"
-        elif types == "f":
-            downloadFilename = "{}_T_F_2025_CN_100m_R2025A_v1.tif"
-            saveFilename = "{}_['f']_allAge_merge.tif"
-        else:
-            raise RuntimeError("Unsupport merge type!")
+    # @staticmethod
+    # def copy(downloadPath: str, savePath: str, types: str = 'm') -> None:
+    #     if types == "m":
+    #         downloadFilename = "{}_T_M_2025_CN_100m_R2025A_v1.tif"
+    #         saveFilename = "{}_['m']_allAge_merge.tif"
+    #     elif types == "f":
+    #         downloadFilename = "{}_T_F_2025_CN_100m_R2025A_v1.tif"
+    #         saveFilename = "{}_['f']_allAge_merge.tif"
+    #     else:
+    #         raise RuntimeError("Unsupport merge type!")
         
-        mkdir(savePath)
-        countries = readFiles(downloadPath).allFolder()
-        n = len(countries)
-        bar = tqdm(total=n, desc="Starting")
-        existDatas = set()
-        for file in readFiles(savePath).specificFile(suffix=["tif"]):
-            existDatas.add(file.split('_')[0])
+    #     mkdir(savePath)
+    #     countries = readFiles(downloadPath).allFolder()
+    #     n = len(countries)
+    #     bar = tqdm(total=n, desc="Starting")
+    #     existDatas = set()
+    #     for file in readFiles(savePath).specificFile(suffix=["tif"]):
+    #         existDatas.add(file.split('_')[0])
         
-        i = 0
-        for country in countries:
-            origin = os.path.join(downloadPath, country)
-            originFile = downloadFilename.format(country.lower())
-            target = os.path.join(savePath, saveFilename.format(country.upper()))
-            if country in existDatas:
-                tqdm.write("Country {}({}/{}) already exists in datas and skipped".format(country, i, n))
-                i += 1
-                bar.update(1)
-                continue
-            elif originFile not in readFiles(origin).specificFile(suffix=["tif"]):
-                populationMerge(downloadPath, blockSize=4096).mergeByAge(country, savePath, gender=[types])
-            else:
-                shutil.copy(os.path.join(origin, originFile), target)
+    #     i = 0
+    #     for country in countries:
+    #         origin = os.path.join(downloadPath, country)
+    #         originFile = downloadFilename.format(country.lower())
+    #         target = os.path.join(savePath, saveFilename.format(country.upper()))
+    #         if country in existDatas:
+    #             tqdm.write("Country {}({}/{}) already exists in datas and skipped".format(country, i, n))
+    #             i += 1
+    #             bar.update(1)
+    #             continue
+    #         elif originFile not in readFiles(origin).specificFile(suffix=["tif"]):
+    #             populationMerge(downloadPath, blockSize=4096).mergeByAge(country, savePath, gender=[types])
+    #         else:
+    #             shutil.copy(os.path.join(origin, originFile), target)
 
-        return
+    #     return
 
     def mergeAll( # type: ignore
         self,
@@ -281,15 +281,15 @@ if __name__ == "__main__":
     DOWN_POP = r"D:\Population_Related\global_2025\population"
     SAVE_PATH = r"D:\Population_Related\global_2025"
     # populationMerge(DOWN_POP, blockSize=4096).mergeAll(os.path.join(SAVE_PATH, "population_All"), multiThread=4)
-    populationMerge.copy(DOWN_POP, os.path.join(SAVE_PATH, "population_Male"), 'm')
-    populationMerge.copy(DOWN_POP, os.path.join(SAVE_PATH, "population_Female"), 'f')
-    # "children": <20, "young": 20-44, "middle": 45-59, "elderly">=60
-    ageGroup = {
-        "children": [x for x in range(0, 20, 5)] + [1],
-        "young": [x for x in range(20, 45, 5)],
-        "middle": [x for x in range(45, 60, 5)],
-        "elderly": [x for x in range(60, 91, 5)]
-    }
-    for group in ["children", "young", "middle", "elderly"]:
-        populationMerge(DOWN_POP, blockSize=4096) \
-            .mergeAll(os.path.join(SAVE_PATH, "population_All_{}".format(group)), mainAge=ageGroup[group], multiThread=4)
+    # populationMerge(DOWN_POP, blockSize=4096).mergeAll(os.path.join(SAVE_PATH, "population_Male"), gender=['m'], multiThread=8)
+    populationMerge(DOWN_POP, blockSize=4096).mergeAll(os.path.join(SAVE_PATH, "population_Female"), gender=['f'], multiThread=8)
+    # # "children": <20, "young": 20-44, "middle": 45-59, "elderly">=60
+    # ageGroup = {
+    #     "children": [x for x in range(0, 20, 5)] + [1],
+    #     "young": [x for x in range(20, 45, 5)],
+    #     "middle": [x for x in range(45, 60, 5)],
+    #     "elderly": [x for x in range(60, 91, 5)]
+    # }
+    # for group in ["children", "young", "middle", "elderly"]:
+    #     populationMerge(DOWN_POP, blockSize=4096) \
+    #         .mergeAll(os.path.join(SAVE_PATH, "population_All_{}".format(group)), mainAge=ageGroup[group], multiThread=4)

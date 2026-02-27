@@ -1,17 +1,23 @@
 import sys, os
 import numpy as np
 import seaborn as sns
-from matplotlib.axes import Axes
-from matplotlib.patches import Patch
+import matplotlib.lines as mlines
 
 sys.path.append(".") # Set path to the roots
 
-from _plot import plt, BAR_COLORS, NOTE_SIZE
+from _plot import plt, BAR_COLORS, NOTE_SIZE, BOX_KWARGS
 from analysis.__readNode import readNode
 from analysis.__setting import STAND_NAME, AColumns
 from analysis.__statisticalDiff import Wilcoxon
 from analysis.__calRatio import calRatio
-from analysis.relationAnalysis import relationAnalysis
+
+MEAN_LEGEND = mlines.Line2D(
+    [], [], 
+    marker='^', color="green",
+    linestyle="None",
+    markersize=10,
+    label="Mean"
+)
 
 def popAndPOIAnalysis(
     path: str, analysisType: str,
@@ -31,7 +37,7 @@ def popAndPOIAnalysis(
     """
     A_BEFORE, A_AFTER = AColumns(analysisType, accOrEquity, 0)
 
-    df, n, nc = readNode(path, minEvcsNum)
+    df, _, _ = readNode(path, minEvcsNum)
     scale = os.path.basename(path).split('.')[0]
     addCol = ["iso3", "city"] if scale == "city" else ["iso3"]
     df = df[A_BEFORE + A_AFTER + addCol]
@@ -46,19 +52,20 @@ def popAndPOIAnalysis(
     print("\n")
     
     # Plot
-    subplot = plt.subplot("WN31", 1, 3, widthRatios=[3, 1, 5])
+    subplot = plt.subplot("H31", 2, 1, heightRatios=[2, 3])
+    # subplot = plt.subplot("WN31", 1, 2, widthRatios=[1, 3])
     # ax1 = subplot.axs[1] # Non zero ECDF
-    ax1 = subplot.axs[0] # Relation scatter
-    ax2 = subplot.axs[1] # Proportion of zero bar
-    ax3 = subplot.axs[2] # Box plot
+    # ax1 = subplot.axs[0] # Relation scatter
+    ax2 = subplot.axs[0] # Proportion of zero bar
+    ax3 = subplot.axs[1] # Box plot
     legends = []
 
-    addLegend = relationAnalysis(
-        path,
-        "popStatic" if analysisType == "pop" else analysisType,
-        os.path.dirname(savePath)
-    ).plot((accOrEquity, "evcs"), ax=ax1)
-    legends.extend(addLegend)
+    # addLegend = relationAnalysis(
+    #     path,
+    #     "popStatic" if analysisType == "pop" else analysisType,
+    #     os.path.dirname(savePath)
+    # ).plot((accOrEquity, "evcs"), ax=ax1)
+    # legends.extend(addLegend)
 
     # ## non-0 ECDF
     # group: str
@@ -103,7 +110,7 @@ def popAndPOIAnalysis(
     ax2.set_yticklabels(ratio, rotation=45)
     ax2.grid(True, alpha=0.3, axis='x')
     plt.standAxisName(ax2, 'y', STAND_NAME)
-    # Continent
+    # Add legends for portation bar
     legends.extend(ax2.get_legend_handles_labels()[0])
 
     # Wilcoxon
@@ -117,11 +124,15 @@ def popAndPOIAnalysis(
     # Box plot
     sns.boxplot(
         data=df[ratio],
-        ax = ax3,
+        ax=ax3,
         showfliers=False,
         showmeans=True,
-        color=BAR_COLORS[0][0]
+        color=BAR_COLORS[0][0],
+        **BOX_KWARGS
     )
+
+    ## Add legends for triangle mean point
+    legends.append(MEAN_LEGEND)
 
     # Add background color for different groups
     for i, col in enumerate(ratio):
@@ -145,7 +156,7 @@ def popAndPOIAnalysis(
     ax3.set_xlim(-0.5, len(ratio) - 0.5)
     ymin, ymax = ax3.get_ylim()
     startHeight = ymax
-    lineStep = 0.12 * (ymax - ymin)
+    lineStep = 0.15 * (ymax - ymin)
     maxHeight = startHeight
     
     pairs = {startHeight: (0,0)}
@@ -197,7 +208,7 @@ def popAndPOIAnalysis(
                 lineHeight + lineStep/2,
                 text,
                 ha="center", va="bottom",
-                fontsize=NOTE_SIZE,
+                fontsize=NOTE_SIZE*0.8,
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8)
             )
             
@@ -216,6 +227,7 @@ def popAndPOIAnalysis(
 
     subplot.fig.legend(
         loc="lower center",
+        bbox_to_anchor=(0.5, -0.008),
         handles=legends,
         ncol=6
     )

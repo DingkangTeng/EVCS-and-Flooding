@@ -36,47 +36,46 @@ class autoCorrelation:
     def __checkCollinearity(self) -> None:
         X = self.df[self.X_COL]
         
-        # 1. 相关系数矩阵
+        # Correlation matrix
         print("\n" + "="*60)
-        print("1. 变量相关系数矩阵")
+        print("1. Correlation matrix")
         print("="*60)
         
         corr_matrix = X.corr()
         
-        # 输出相关系数矩阵
-        print("\n相关系数矩阵:")
+        # Output correlation matrix
+        print("\nCorrelation matrix:")
         print(corr_matrix.round(4).to_string())
         
-        # 2. 计算方差膨胀因子(VIF)
+        # Variance inflation factor(VIF)
         print("\n" + "="*60)
-        print("2. 方差膨胀因子(VIF)")
+        print("2. Variance Inflation Factor (VIF)")
         print("="*60)
         
-        X_const = add_constant(X)  # 添加常数项
+        X_const = add_constant(X)  # add constant
         
         vif_data = gpd.pd.DataFrame()
         vif_data["feature"] = ["const"] + X.columns.tolist()
         vif_data["VIF"] = [variance_inflation_factor(X_const, i) 
                         for i in range(X_const.shape[1])]
         
-        # 移除常数的VIF
+        # Removed constant VIF
         vif_data = vif_data[vif_data["feature"] != "const"]
         
-        print("\nVIF值（VIF > 10表示严重的多重共线性）:")
+        print("\nVIF (VIF > 10 means high multicollinearity):")
         print(vif_data.round(2).to_string())
         
-        # 标记VIF过高的变量
+        # Mark features with high VIF
         high_vif = vif_data[vif_data["VIF"] > 10]
         if not high_vif.empty:
-            print("\n警告：以下变量存在严重多重共线性（VIF > 10）:")
+            print("\nWarning: The following variables exhibit severe multicollinearity (VIF > 10):")
             for _, row in high_vif.iterrows():
                 print(f"  {row['feature']}: VIF = {row['VIF']:.2f}")
         
-        # 4. 可视化
         fig = plt.subplot("D", 2, 2, None, legend=False)
         axes = fig.axs
         
-        # 4.1 相关系数热图
+        # Heat map of correlation matrix
         mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
         sns.heatmap(corr_matrix, mask=mask, annot=True, fmt=".2f", 
                     cmap="coolwarm", center=0, ax=axes[0],
@@ -92,8 +91,7 @@ class autoCorrelation:
         axes[1].set_xlabel("VIF")
         axes[1].set_title("VIF")
         
-        # 4.3 相关系数网络图
-        # 创建网络图
+        # Correlation coefficient network
         n_vars = len(corr_matrix.columns)
         angles = np.linspace(0, 2*np.pi, n_vars, endpoint=False).tolist()
         radius = 1.0
@@ -101,7 +99,7 @@ class autoCorrelation:
         axes[2].set_aspect('equal')
         axes[2].axis('off')
         
-        # 添加节点
+        ## Add nodes
         for i, (var, angle) in enumerate(zip(corr_matrix.columns, angles)):
             x = radius * np.cos(angle)
             y = radius * np.sin(angle)
@@ -109,7 +107,7 @@ class autoCorrelation:
             axes[2].text(x*1.15, y*1.15, var, ha='center', va='center', 
                         fontsize=9, rotation=angle*180/np.pi)
         
-        # 添加边（只显示强相关）
+        ## Add edges for strong correlations
         for i in range(n_vars):
             for j in range(i+1, n_vars):
                 corr: float = abs(corr_matrix.iloc[i, j]) # type: ignore
@@ -136,7 +134,7 @@ class autoCorrelation:
         axes[2].set_ylim(-1.5, 1.5)
         axes[2].set_title("Circle (|r| > 0.5)")
         
-        # 4.4 特征值比例图（检测多重共线性）
+        # Eigenvalue ratio map (detecting multicollinearity)
         X_normalized = (X - X.mean()) / X.std()
         corr_matrix_normalized = X_normalized.corr()
         eigenvalues = np.linalg.eigvals(corr_matrix_normalized)

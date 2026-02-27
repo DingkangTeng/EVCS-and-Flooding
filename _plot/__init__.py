@@ -1,5 +1,5 @@
 from . import plt
-from .__setting import NOTE_SIZE
+from .__setting import NOTE_SIZE, TICK_SIZE, BOX_KWARGS
 
 # Color map
 BAR_COLORS = [
@@ -8,6 +8,11 @@ BAR_COLORS = [
     ["#7D5A8A", "#DE7294", "#90BBAA", "#E6D2C2", "#F0E0D3"],
     ["#165188", "#BFCF61", "#9FCBC3", "#BFD3BC", "#DDDAB4"],
 ]
+
+def BAR_COLORS_TRANS(alpha: float = 0.5) -> list:
+    from matplotlib.colors import to_rgba
+    
+    return [[to_rgba(color, alpha) for color in colors] for colors in BAR_COLORS]
 
 # General setting
 def plotSet(scal1: float | int = 1, scal2: float | int = 1) -> None:
