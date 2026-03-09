@@ -82,7 +82,7 @@ class linearRegressor(autoCorrelation):
                 ha="center", va="bottom", fontsize=NOTE_SIZE, fontweight="bold"
             )
 
-        ax3.set_ylabel("Absolute Standardized Coefficient")
+        ax3.set_ylabel("Absolute standardized coefficient")
 
         # Residual analysis scatter plot
         ax4 = axs[1]
@@ -102,8 +102,8 @@ class linearRegressor(autoCorrelation):
         # Add colorbar and labels and r2
         cbar = plt.plt.colorbar(scatter, ax=ax4)
         cbar.set_label("Residuals")
-        ax4.set_xlabel("Predicted EVCS Change")
-        ax4.set_ylabel("Actual EVCS Change")
+        ax4.set_xlabel("Predicted EVCS change")
+        ax4.set_ylabel("Actual EVCS change")
         ax4.text(
             0.05, 0.95,
             f'R² = {results.rsquared:.4f}',

@@ -9,10 +9,14 @@ BAR_COLORS = [
     ["#165188", "#BFCF61", "#9FCBC3", "#BFD3BC", "#DDDAB4"],
 ]
 
-def BAR_COLORS_TRANS(alpha: float = 0.5) -> list:
+def BAR_COLORS_TRANS(alpha: float = 0.5, group: int | None = 0) -> list:
     from matplotlib.colors import to_rgba
     
-    return [[to_rgba(color, alpha) for color in colors] for colors in BAR_COLORS]
+    if group is None:
+        return [[to_rgba(color, alpha) for color in colors] for colors in BAR_COLORS]
+    
+    else:
+        return [to_rgba(color, alpha) for color in BAR_COLORS[group]]
 
 # General setting
 def plotSet(scal1: float | int = 1, scal2: float | int = 1) -> None:

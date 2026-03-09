@@ -2,6 +2,7 @@ import sys, os
 import numpy as np
 import seaborn as sns
 import matplotlib.lines as mlines
+from pandas import DataFrame
 
 sys.path.append(".") # Set path to the roots
 
@@ -37,27 +38,37 @@ def popAndPOIAnalysis(
     """
     A_BEFORE, A_AFTER = AColumns(analysisType, accOrEquity, 0)
 
-    df, _, _ = readNode(path, minEvcsNum)
+    df, _, _ = readNode(path, minEvcsNum, ignoreUneffected=True)
     scale = os.path.basename(path).split('.')[0]
     addCol = ["iso3", "city"] if scale == "city" else ["iso3"]
     df = df[A_BEFORE + A_AFTER + addCol]
     savePath = os.path.join(savePath, analysisType)
     if not os.path.exists(savePath): os.makedirs(savePath)
 
-    df, ratio, zeroCounts, nonZeroCounts = calRatio(
+    results = calRatio(
         df, A_BEFORE, A_AFTER, True, True if accOrEquity == "equity" else False
     )
     
     # Save change ratio
     print("\n")
     
+    # Equity
+    if accOrEquity == "accessibility":
+        __accessibilityAnalysis(*results, scale, savePath)
+    else:
+        __equityAnalysis(*results, analysisType, scale, savePath)
+
+    return
+
+def __accessibilityAnalysis(
+    df: DataFrame, ratio: np.ndarray, zeroCounts: np.ndarray, nonZeroCounts: np.ndarray,
+    scale: str,
+    savePath: str
+) -> None:
     # Plot
-    subplot = plt.subplot("H31", 2, 1, heightRatios=[2, 3])
-    # subplot = plt.subplot("WN31", 1, 2, widthRatios=[1, 3])
-    # ax1 = subplot.axs[1] # Non zero ECDF
-    # ax1 = subplot.axs[0] # Relation scatter
-    ax2 = subplot.axs[0] # Proportion of zero bar
-    ax3 = subplot.axs[1] # Box plot
+    subplot = plt.subplot("D", 1, 2, widthRatios=[12, 1])
+    ax1 = subplot.axs[0] # Non zero ECDF
+    ax2 = subplot.axs[1] # Relation scatter
     legends = []
 
     # addLegend = relationAnalysis(
@@ -67,64 +78,88 @@ def popAndPOIAnalysis(
     # ).plot((accOrEquity, "evcs"), ax=ax1)
     # legends.extend(addLegend)
 
-    # ## non-0 ECDF
-    # group: str
-    # colors = BAR_COLORS[0] + BAR_COLORS[2]
-    # i = 0
-    # for group in ratio:
-    #     groupData = df[group][(df[group] != 0) & df[group].notna()]
-    #     if len(groupData) > 0:
-    #         # ECDF
-    #         x = np.sort(groupData)
-    #         y = np.arange(1, len(x)+1) / len(x)
-    #         ax1.plot(
-    #             x, y,
-    #             label=STAND_NAME.get(group, group).capitalize().replace("\n", " ").replace("poi", "POI"),
-    #             color=colors[i],
-    #             linewidth=2
-    #         )
-    #         i += 1
+    ## non-0 ECDF
+    print(ratio)
+    group: str
+    i = 0
+    for group in ratio:
+        # Only draw final results for accessibility
+        if "All" not in group:
+            i += 1
+            continue
+        groupData = df[group][(df[group] != 0) & df[group].notna()]
+        if len(groupData) > 0:
+            # ECDF
+            x = np.sort(groupData)
+            y = np.arange(1, len(x)+1) / len(x)
+            ax1.plot(
+                x, y,
+                # label=STAND_NAME.get(group, group).capitalize().replace("\n", " ").replace("poi", "POI"),
+                color=BAR_COLORS[0][0],
+                linewidth=5
+            )
+            # Mean and median
+            mean = float(np.mean(groupData))
+            p50 = float(np.median(groupData))
+            ax1.axvline(mean, color="red", linestyle='--', linewidth=3, label=f'Mean: {mean:.2f}')
+            ax1.axvline(p50, color="orange", linestyle=':', linewidth=3, alpha=0.8, label=f'Median: {p50:.2f}')
+        break
+    
+    ax1.legend()
+    ax1.set_xlabel("Change Ratio (%)")
+    ax1.set_ylabel("Cumulative Probability")
+    # ax1.yaxis.tick_right()
+    # ax1.yaxis.set_label_position("right")
+    
+    # Proportion of 0 bar
+    __portionBar(ax2, [ratio[i]], [zeroCounts[i]], [nonZeroCounts[i]], horizontal=False)
+    ## Adjust labels
+    ax2.yaxis.set_ticks_position("right")
+    ax2.yaxis.set_label_position("right")
 
-    # ax1.set_xlabel("Change Ratio (%)")
-    # ax1.set_ylabel("Cumulative Probability")
-    # # ax1.yaxis.tick_right()
-    # # ax1.yaxis.set_label_position("right")
-    
-    ## Proportion of 0 bar
-    yPos = np.arange(len(ratio))
-    
-    totalCounts = [zero + non_zero for zero, non_zero in zip(zeroCounts, nonZeroCounts)]
-    zeroPercent = [zero / total * 100 for zero, total in zip(zeroCounts, totalCounts)]
-    nonZeroPercent = [non_zero / total * 100 for non_zero, total in zip(nonZeroCounts, totalCounts)]
-    
-    ## Stacked horizontal bar
-    ax2.barh(yPos, zeroPercent, height=0.6, label="Zero Values", alpha=0.7)
-    ax2.barh(yPos, nonZeroPercent, height=0.6, left=zeroPercent, label="Non-zero Values", alpha=0.7)
-    
-    ## Label
-    for i, (zp, nzp) in enumerate(zip(zeroPercent, nonZeroPercent)):
-        ax2.text(zp/2, i, f"{zp:.2f}%", ha="center", va="center", fontsize=NOTE_SIZE, fontweight="bold") if zp != 0 else None
-        ax2.text(zp + nzp/2, i, f"{nzp:.2f}%", ha="center", va="center", fontsize=NOTE_SIZE, fontweight="bold")
-    ax2.set_xlabel("Percentage (%)")
-    ax2.set_yticks(yPos)
-    ax2.set_yticklabels(ratio, rotation=45)
-    ax2.grid(True, alpha=0.3, axis='x')
-    plt.standAxisName(ax2, 'y', STAND_NAME)
     # Add legends for portation bar
     legends.extend(ax2.get_legend_handles_labels()[0])
+
+    subplot.fig.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.07),
+        handles=legends,
+        ncol=6
+    )
+
+    plt.plot(savePath, f"{scale}_accessibility.jpg")
+
+    return
+
+def __equityAnalysis(
+    df: DataFrame, ratio: np.ndarray, zeroCounts: np.ndarray, nonZeroCounts: np.ndarray,
+    analysisType: str, scale: str,
+    savePath: str
+) -> None:
+    # Plot
+    subplot = plt.subplot("H31", 2, 1, heightRatios=[2, 3])
+    ax1 = subplot.axs[0] # Proportion of zero bar
+    ax2 = subplot.axs[1] # Box plot
+    legends = []
+    
+    # Proportion of 0 bar
+    __portionBar(ax1, ratio, zeroCounts, nonZeroCounts)
+
+    # Add legends for portation bar
+    legends.extend(ax1.get_legend_handles_labels()[0])
 
     # Wilcoxon
     wilcoxon = Wilcoxon(
         ratio,
         df,
-        f"{analysisType} {accOrEquity}",
-        os.path.join(savePath, f"{scale}_{accOrEquity}_wilcoxon.csv") if savePath != "" else ""
+        f"{analysisType} equity",
+        os.path.join(savePath, f"{scale}_equity_wilcoxon.csv") if savePath != "" else ""
     )
 
     # Box plot
     sns.boxplot(
         data=df[ratio],
-        ax=ax3,
+        ax=ax2,
         showfliers=False,
         showmeans=True,
         color=BAR_COLORS[0][0],
@@ -144,7 +179,7 @@ def popAndPOIAnalysis(
             BAR_COLORS[1][3] if style == "2024" else
             BAR_COLORS[1][4]
         )
-        ax3.axvspan(
+        ax2.axvspan(
             i - 0.5,
             i + 0.5,
             facecolor=faceColor,
@@ -153,8 +188,8 @@ def popAndPOIAnalysis(
         )
 
     # Add significance annotations
-    ax3.set_xlim(-0.5, len(ratio) - 0.5)
-    ymin, ymax = ax3.get_ylim()
+    ax2.set_xlim(-0.5, len(ratio) - 0.5)
+    ymin, ymax = ax2.get_ylim()
     startHeight = ymax
     lineStep = 0.15 * (ymax - ymin)
     maxHeight = startHeight
@@ -184,7 +219,7 @@ def popAndPOIAnalysis(
             row = wilcoxon[(wilcoxon["group1"] == group1) & (wilcoxon["group2"] == group2)]
             
             ## Draw line
-            ax3.plot(
+            ax2.plot(
                 [x1, x1, x2, x2], 
                 [
                     lineHeight,
@@ -203,7 +238,7 @@ def popAndPOIAnalysis(
             text = f"{e:.4f} ({m})" if m != "negligible" else f"{e:.4f}"
             if s not in {'', '.'}:
                 text = f"{text}$^{{{s}}}$"
-            ax3.text(
+            ax2.text(
                 (x1 + x2) / 2,
                 lineHeight + lineStep/2,
                 text,
@@ -217,13 +252,13 @@ def popAndPOIAnalysis(
             else: pairs[lineHeight] = (min(x1, pairMin), max(x2, pairMax))
             maxHeight = max(maxHeight, lineHeight)
     
-    ax3.set_ylim(
+    ax2.set_ylim(
         ymin,
-        max(2, maxHeight + lineStep) if accOrEquity == "accessibility" else max(0.8, maxHeight + lineStep)
+        max(0.8, maxHeight + lineStep)
     )
-    # ax3.yaxis.tick_right()
-    ax3.set_ylabel("Change ratio (%)")
-    plt.standAxisName(ax3, 'x', STAND_NAME)
+    # ax2.yaxis.tick_right()
+    ax2.set_ylabel("Change ratio (%)")
+    plt.standAxisName(ax2, 'x', STAND_NAME)
 
     subplot.fig.legend(
         loc="lower center",
@@ -232,7 +267,57 @@ def popAndPOIAnalysis(
         ncol=6
     )
 
-    plt.plot(savePath, f"{scale}_{accOrEquity}.jpg")
+    plt.plot(savePath, f"{scale}_equity.jpg")
+
+    return
+
+# Proportion of 0 bar
+def __portionBar(
+    ax: plt.Axes,
+    ratio: np.ndarray | list, zeroCounts: np.ndarray | list, nonZeroCounts: np.ndarray | list,
+    horizontal: bool = True
+) -> None:
+    yPos = np.arange(len(ratio))
+    
+    totalCounts = [zero + non_zero for zero, non_zero in zip(zeroCounts, nonZeroCounts)]
+    zeroPercent = [zero / total * 100 for zero, total in zip(zeroCounts, totalCounts)]
+    nonZeroPercent = [non_zero / total * 100 for non_zero, total in zip(nonZeroCounts, totalCounts)]
+    
+    ## Stacked horizontal bar
+    if horizontal:
+        ax.barh(yPos, zeroPercent, height=0.6, label="Zero Values", alpha=0.7)
+        ax.barh(yPos, nonZeroPercent, height=0.6, left=zeroPercent, label="Non-zero Values", alpha=0.7)
+        ax.set_yticks(yPos)
+        ax.set_yticklabels(ratio)
+        ax.set_xlabel("Percentage (%)")
+    else:
+        ax.bar(yPos, zeroPercent, width=0.6, label="Zero Values", alpha=0.7)
+        ax.bar(yPos, nonZeroPercent, width=0.6, bottom=zeroPercent, label="Non-zero Values", alpha=0.7)
+        ax.set_xticks(yPos)
+        ax.set_xticklabels(ratio)
+        ax.set_ylabel("Percentage (%)")
+    
+    ## Label
+    for i, (zp, nzp) in enumerate(zip(zeroPercent, nonZeroPercent)):
+        ax.text(
+            zp/2 if horizontal else i,
+            i if horizontal else zp/2,
+            f"{zp:.2f}%",
+            ha="center", va="center",
+            fontsize=NOTE_SIZE, fontweight="bold",
+            rotation=0 if horizontal else 90
+        ) if zp != 0 else None
+        ax.text(
+            zp + nzp/2 if horizontal else i,
+            i if horizontal else zp + nzp/2,
+            f"{nzp:.2f}%",
+            ha="center", va="center",
+            fontsize=NOTE_SIZE, fontweight="bold",
+            rotation=0 if horizontal else 90
+        )
+
+    ax.grid(True, alpha=0.3, axis='x')
+    plt.standAxisName(ax, 'y' if horizontal else 'x', STAND_NAME)
 
     return
 
@@ -241,17 +326,9 @@ if __name__ == "__main__":
     root = r"C:\\0_PolyU\\test"
     ANALY_RESULT = os.path.join(root, "3km")
     CITY_RESULT = os.path.join(ANALY_RESULT, "city.csv")
-    iso3 = os.path.join(root, "iso3.csv")
-    # popAndPOIAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT)
-    # popAndPOIAnalysis(CITY_RESULT, "popDynamic", ANALY_RESULT)
+
     popAndPOIAnalysis(CITY_RESULT, "pop", ANALY_RESULT)
     popAndPOIAnalysis(CITY_RESULT, "POI", ANALY_RESULT)
-    # popAndPOIAnalysis(iso3, "popStatic", root)
-    # popAndPOIAnalysis(iso3, "popDynamic", root)
-    # popAndPOIAnalysis(iso3, "POI", root)
 
     popAndPOIAnalysis(CITY_RESULT, "pop", ANALY_RESULT, accOrEquity="equity")
     popAndPOIAnalysis(CITY_RESULT, "POI", ANALY_RESULT, accOrEquity="equity")
-    # popAndPOIAnalysis(iso3, "popStatic", root, accOrEquity="equity")
-    # popAndPOIAnalysis(iso3, "popDynamic", root, accOrEquity="equity")
-    # popAndPOIAnalysis(iso3, "POI", root, accOrEquity="equity")

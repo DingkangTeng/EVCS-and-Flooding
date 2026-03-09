@@ -21,7 +21,7 @@ _STAND_NAME = {
     # "A_2024_Gini_change": "Gini coefficient",
     # "A_POIAll_Gini_change": "Gini coefficient",
     "EVCS_Change": "EVCS count",
-    "roadsLengthChange": "Road Length"
+    "roadsLengthChange": "Road length"
 }
 
 class relationAnalysis:

@@ -1,7 +1,5 @@
-import sys, os, json
+import os, json
 from typing import Iterator, Any
-
-sys.path.append(".") # Set path to the roots
 
 # data structure method
 ## list

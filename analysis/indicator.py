@@ -5,6 +5,7 @@ import rasterio as rio
 from osmnx import convert
 from networkx import density
 from rasterio.mask import mask
+from sklearn.neighbors import BallTree
 from shapely.geometry.base import BaseGeometry
 from shapely.geometry import Polygon, box
 from pyproj import CRS
@@ -26,6 +27,8 @@ warnings.filterwarnings(
     category=UserWarning,
     message="Geometry is in a geographic CRS.*"
 )
+
+R = 6371.0  # earth radius km
 
 class EVCSIndicator:
     __slots__ = ["df", "savePath"]
@@ -74,11 +77,12 @@ class EVCSIndicator:
     
     def EVCS(self, evcs: str | tuple[str, str] | gpd.GeoDataFrame, maxThread:int = 1) -> None:
         # Add density
-        self.df["EVCSDensity"] = self.df["EVCSNum"] / self.df["area"]
+        self.df["EVCSDensity"] = self.df["EVCSNum"] / self.df["area"] * 1000000 # counts/km2
 
         # Add coverage
         evcs = self.__readFile(evcs, [])
         self.df["EVCScoverage"] = np.nan
+        self.df["EVCSAggregation"] = np.nan # Nearest Neighbor Index, NNI, from 0 to 1, 0 means aggregate and 1 means saperate
         bar = tqdm(total=self.df.shape[0], desc="Calculating EVCS coverage", unit="city")
 
         assert self.df.crs is not None
@@ -93,6 +97,7 @@ class EVCSIndicator:
             for row in self.df.itertuples():
                 idx = getattr(row, "Index")
                 boundary: BaseGeometry = getattr(row, "geometry")
+                area = getattr(row, "area")
 
                 # Get intersection
                 possibleMatchesIdx = list(evcs.sindex.intersection(boundary.bounds))
@@ -102,18 +107,20 @@ class EVCSIndicator:
                 else:
                     evcsWithin = gpd.GeoDataFrame(geometry=[], crs=evcs.crs)
                 
-                future = executor.submit(self._getEVCSIntersection, evcsWithin, boundary, self.df.crs)
+                future = executor.submit(self._getEVCSIntersection, evcsWithin, boundary, area, self.df.crs)
                 futures.append(future)
                 idxDict[future] = idx
 
             for future in as_completed(futures):
                 idx = idxDict[future]
                 try:
-                    result, intersection = future.result()
+                    coverage, intersection, aggregation = future.result()
                 except Exception as e:
                     raise RuntimeError(f"{idx}: {e}")
                 else:
-                    self.df.at[idx, "EVCScoverage"] = result
+                    self.df.at[idx, "EVCScoverage"] = coverage
+                    self.df.at[idx, "EVCSAggregation"] = aggregation
+                    # Save coverage shape
                     if intersection is not None:
                         intersections[n] = intersection
                         n += 1
@@ -162,10 +169,10 @@ class EVCSIndicator:
     
     @staticmethod
     def _getEVCSIntersection(
-        evcsWithin: gpd.GeoDataFrame, boundary: BaseGeometry,
-        crs: CRS, WIDTH = 0.008333 # Around 1km in WGS84
-    ) -> tuple[float, None | gpd.GeoSeries]:
-        if evcsWithin.empty: return 0, None
+        evcsWithin: gpd.GeoDataFrame, boundary: BaseGeometry, boundaryArea: float,
+        crs: CRS, WIDTH = 0.01 # Around 1km in WGS84
+    ) -> tuple[float, None | gpd.GeoSeries, float]:
+        if evcsWithin.empty: return 0, None, np.nan
         else:
             minx, miny, maxx, maxy = boundary.bounds
             
@@ -189,68 +196,129 @@ class EVCSIndicator:
             gridGdf = gridGdf.sjoin(evcsWithin, how="left")
             intersection = gridGdf[gridGdf["index_right"].notna()]
 
-        if intersection.empty: return 0, None
-        else: return intersection.shape[0] / gridGdf.shape[0], intersection.geometry
+        # NNI
+        n = evcsWithin.shape[0]
+        if n < 2: aggregation = np.nan
+        else:
+            coords = np.array([(p.y, p.x) for p in evcsWithin.geometry]) # type: ignore
+            coordsRad = np.radians(coords)
+
+            # Calculate the nearest distance for each point
+            tree = BallTree(coordsRad, metric="haversine")
+            distances, _ = tree.query(coordsRad, k=2) # k=2 menas the nearest two points（the fist is itself）
+            nearest_dists = distances[:, 1] * R  # The second is the nearest
+
+            obs_mean = np.mean(nearest_dists)          # Real average nearest distance (km)
+            density = n / boundaryArea * 1000000       # density (count/km2)
+            exp_mean = 0.5 / np.sqrt(density)          # Except nearest distance
+            aggregation = obs_mean / exp_mean
+
+        if intersection.empty: return 0, None, aggregation
+        else: return intersection.shape[0] / gridGdf.shape[0], intersection.geometry, aggregation
     
-    def road(self, roadRoot: str) -> None:
+    def road(self, roadRoot: str, evcs: str | tuple[str, str] | gpd.GeoDataFrame, maxThread:int = 1) -> None:
         self.df["roadLength"] = np.nan
         self.df["roadDensity"] = np.nan
         self.df["roadCoverage"] = np.nan
         self.df["roadsLengthChange"] = np.nan
         self.df["roadConnectivity"] = np.nan # Graph Density
-        iso3 = self.df["iso3"].unique().tolist()
-        bar = tqdm(total=self.df.shape[0], desc="Calculating road related indicator", unit="city")
 
+        evcs = self.__readFile(evcs, ["level1"])
+        iso3 = self.df["iso3"].unique().tolist()
+        bar = tqdm(total=self.df.shape[0] * 2, desc="Calculating road related indicator", unit="city")
+
+        futures = []
+        futuresDict = {}
+        executor = ProcessPoolExecutor(max_workers=maxThread)
         for country in iso3:
-            bar.set_description(f"Calculating road related indicator for {country}")
+            bar.set_description(f"Reading file for {country}")
             road = os.path.join(roadRoot, "{}.gpkg".format(country))
             roadDf = self.__readFile((road, "edges"), usecoles=["length", "affected", 'u', 'v', "key"], index=["city"])
             roadNode = self.__readFile((road, "nodes"), usecoles=['x', 'y'], index=["osmid"])
             if roadDf.crs != self.df.crs: roadDf.to_crs(self.df.crs, inplace=True) # type: ignore
+
             subDf: gpd.GeoDataFrame = self.df.loc[self.df["iso3"] == country]
+            subEVCS: gpd.GeoDataFrame = evcs.loc[evcs["level1"] == country]
 
             for row in subDf.itertuples():
                 idx = getattr(row, "Index")
                 area = getattr(row, "area")
                 boundary: BaseGeometry = getattr(row, "geometry")
                 roads: gpd.GeoDataFrame = roadDf.loc[idx]
+                roadsNodes = roadNode[roadNode.index.isin(gpd.pd.unique(roads[["u", "v"]].values.ravel('K')))]
 
-                if roads.shape[0] == 0:
-                    self.df.at[idx, "roadDensity"] = 0
-                    self.df.at[idx, "roadCoverage"] = 0
-                    self.df.at[idx, "roadLength"] = 0
-                    self.df.at[idx, "roadConnectivity"] = 0
-                else:
-                    length = roads["length"].sum() / 1000
-                    self.df.at[idx, "roadLength"] = length
+                future = executor.submit(
+                    self._singleRoad, roads, area, boundary, roadsNodes, subEVCS
+                )
+                futures.append(future)
+                futuresDict[future] = idx
+                bar.update()
 
-                    # Roads length change
-                    lengthAfter = roads.loc[roads["affected"] == 0, "length"].sum() / 1000
-                    self.df.at[idx, "roadsLengthChange"] = (lengthAfter - length) / length * 100 if length > 0 else 0
-
-                    self.df.at[idx, "roadDensity"] = length / area
-
-                    # Coverage
-                    roadsBuffer = roads.geometry.buffer(0.01).union_all()
-                    intersection = roadsBuffer.intersection(boundary)
-                    self.df.at[idx, "roadCoverage"] = intersection.area / boundary.area
-                    del length, roadsBuffer, intersection
-                    gc.collect()
-
-                    # roadConnectivity, by graph density (edge count / [node count * (node count - 1)])
-                    self.df.at[idx, "roadConnectivity"] = density(
-                        convert.graph_from_gdfs(
-                            roadNode[roadNode.index.isin(gpd.pd.unique(roads[["u", "v"]].values.ravel('K')))],
-                            roads.set_index(["u", "v", "key"])
-                        )
-                    )
-
-                del roads
-                gc.collect()
+        for future in as_completed(futures):
+            bar.set_description(f"Calculating indexs")
+            idx = futuresDict[future]
+            try:
+                resutls = future.result()
+            except Exception as e:
+                raise RuntimeError(e)
+            else:
+                self.df.at[idx, "roadDensity"] = resutls[0]
+                self.df.at[idx, "roadCoverage"] = resutls[1]
+                self.df.at[idx, "roadLength"] = resutls[2]
+                self.df.at[idx, "roadsLengthChange"] = resutls[3]
+                self.df.at[idx, "roadConnectivity"] = resutls[4]
                 bar.update()
         
-        bar.close()        
+        bar.close()
+        executor.shutdown()
+
         return
+    
+    @staticmethod
+    def _singleRoad(
+        roads: gpd.GeoDataFrame,
+        area: np.floating, boundary: BaseGeometry,
+        roadsNodes: gpd.GeoDataFrame,
+        subEVCS: gpd.GeoDataFrame
+    ) -> tuple:
+        if roads.shape[0] == 0:
+            return 0, 0, 0, 0, 0, 0
+        else:
+            length = roads["length"].sum() / 1000
+
+            # Roads density
+            roadDensity = length / area * 1000000 # km/km2
+
+            # Coverage
+            roadsBuffer = roads.geometry.buffer(0.01).union_all()
+            intersection = roadsBuffer.intersection(boundary)
+            roadCoverage = intersection.area / boundary.area
+            del roadsBuffer, intersection
+            gc.collect()
+
+            # Roads length change
+            if subEVCS.shape[0] == 0:
+                roadsLengthChange = np.nan
+            else:
+                buffer = subEVCS.geometry.buffer(0.01).union_all()
+                roadsAroundEVCS = roads.iloc[roads.sindex.query(buffer, predicate="intersects")]
+                lengthAfter = roadsAroundEVCS.loc[roadsAroundEVCS["affected"] == 0, "length"].sum()
+                lengthBefor = roadsAroundEVCS["length"].sum()
+                roadsLengthChange = (lengthAfter - lengthBefor) / lengthBefor * 100 if lengthBefor > 0 else 0
+                del buffer, roadsAroundEVCS
+
+            # roadConnectivity, by graph density (edge count / [node count * (node count - 1)])
+            roadConnectivity = density(
+                convert.graph_from_gdfs(
+                    roadsNodes,
+                    roads.set_index(["u", "v", "key"])
+                )
+            )
+
+        del roads
+        gc.collect()
+
+        return roadDensity, roadCoverage, length, roadsLengthChange, roadConnectivity
     
     def population(self, rasterRoot: str, maxThread: int = 1) -> None:
         # Density
@@ -332,8 +400,8 @@ if __name__ == "__main__":
     SAVE_PATH = r"E:\Population_Related"
     
     a = EVCSIndicator(CITY_RESULT, (GEO_DB, "GAUL_2024_L2"), (r"C:\\0_PolyU\\test\\indicator.gpkg", "city"))
-    # a.EVCS(EVCS, 32)
-    a.road(DOWN_ROAD)
+    a.EVCS(EVCS, 32)
+    # a.road(DOWN_ROAD, EVCS, 8)
     # a.population(os.path.join(SAVE_PATH, "population_All"), 16)
     # a.flooding(r"E:\Flooding_Related\flooding\floodingArea.shp")
     a.save()

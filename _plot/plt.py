@@ -1,6 +1,7 @@
 __all__ = [
     "legend",
     "yticks", "xticks", "ticklabel_format",
+    "xlabel", "ylabel",
     "plot", "figure", "subplot",
     "standAxisName"
 ]
@@ -15,30 +16,30 @@ from .__setting import FIG_SIZE
 # plt original function
 from matplotlib.pyplot import (
     legend,
-    yticks, xticks, ticklabel_format
+    yticks, xticks, ticklabel_format,
+    xlabel, ylabel
 )
 
 # Print or save fig
-def plot(path: str = "", saveName: str = "", fig: Figure | None = None, **kwgs) -> None:
+def plot(path: str = "", saveName: str = "", fig: Figure | None = None, **kwargs) -> None:
     from os.path import join
-    fig = fig if fig is not None else plt.gcf()
-    
-    fig.tight_layout()
 
     if path == "":
-        fig.show()
+        fig.show() if fig is not None else (plt.show(), plt.tight_layout())
     else:
+        fig = fig if fig is not None else plt.gcf()
+        fig.tight_layout()
         fig.savefig(
             join(path, "defaultName.jpg") if saveName == "" else join(path, saveName),
-            **kwgs
+            **kwargs
         )
 
     return plt.close(fig)
 
 # Initial fig
-def figure(figsize: str) -> tuple[Figure, Axes]:
+def figure(figsize: str, **kwargs) -> tuple[Figure, Axes]:
     fig = plt.figure(figsize=getattr(FIG_SIZE, figsize))
-    ax = fig.subplots()
+    ax = fig.subplots(**kwargs)
 
     return fig, ax
 
@@ -53,7 +54,8 @@ class subplot:
         heightRatios: list[int] | None = None, widthRatios: list[int] | None = None,
         legend: bool = True,
         sharex: bool = False, sharey: bool = False,
-        keepyticks: bool = False, keepxticks: bool = False
+        keepyticks: bool = False, keepxticks: bool = False,
+        **kwargs
     ) -> None:
         from matplotlib.gridspec import GridSpec
 
@@ -75,12 +77,13 @@ class subplot:
         self.__axs: list[Axes] = []
         for i in range(y):
             for j in range(x):
-                if i == 0 and j == 0: ax = plt.subplot(gs[0, 0])
+                if i == 0 and j == 0: ax = plt.subplot(gs[0, 0], **kwargs)
                 else:
                     ax = plt.subplot(
                         gs[i, j],
                         sharex=self.__axs[0] if sharex else None,
-                        sharey=self.__axs[0] if sharey else None
+                        sharey=self.__axs[0] if sharey else None,
+                        **kwargs
                     )
 
                 # Delete inner ticks
@@ -107,8 +110,23 @@ class subplot:
     def axs(self) -> list[Axes]:
         return self.__axs
     
-    def plot(self, path: str = "", saveName: str = "", **kwgs) -> None:
-        plot(path, saveName, self.__fig, **kwgs)
+    def plot(self, path: str = "", saveName: str = "", **kwargs) -> None:
+        plot(path, saveName, self.__fig, **kwargs)
+
+    def legend(self, loc: str = "lower center", **kwargs) -> None:
+        handles, labels = self.axs[0].get_legend_handles_labels()
+        self.fig.legend(
+            handles=handles,
+            labels=labels,
+            loc=loc,
+            **kwargs
+        )
+        
+        for ax in self.axs:
+            leg = ax.get_legend()
+            if leg is not None: leg.remove()
+
+        return
     
 # Change axis name
 def standAxisName(ax: Axes, axis: str, standard: dict) -> None:

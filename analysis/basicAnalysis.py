@@ -20,13 +20,6 @@ def EVCSChange(path: str, savePath: str = "", minEvcsNum: int = 0, nBins: int = 
     print(f"There are {df[df["EVCSChange"] == -100].shape[0]} cities/countries' EVCS are all affected by the flooding")
     print(f"There are {df[df["EVCSChange"] == 0].shape[0]} cities/countries' EVCS receive no affection from flooding.")
 
-    # Save results
-    df[[idx, "EVCSChange"]].to_csv(
-        os.path.join(os.path.dirname(path), "{}_EVCS_results.csv".format(os.path.basename(path).split('.')[0])),
-        encoding="utf-8",
-        index=False
-    )
-
     __binPlot(df, "EVCSChange", nBins, figsize, savePath=savePath, saveName="EVCSChange_{}.jpg".format(idx))
 
     return df[[idx, "EVCSChange"]]

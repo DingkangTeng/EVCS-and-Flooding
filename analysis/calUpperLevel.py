@@ -133,7 +133,7 @@ class calUpperLevel:
         A_BEFORE, A_AFTERs = AColumns("all", "all", 3)
         sub = ["all", "EVCSOnly", "RoadsOnly"]
         for i, A_AFTER in enumerate(A_AFTERs):
-            df, cols = calRatio(dfs[["iso3", "city"] + A_BEFORE + A_AFTER].copy(), A_BEFORE, A_AFTER, False, False)
+            df, cols = calRatio(dfs[["iso3", "city", "EVCSChange"] + A_BEFORE + A_AFTER].copy(), A_BEFORE, A_AFTER, False, False)
             df.rename(columns={x: f"{x}_{sub[i]}" for x in cols}, inplace=True)
             result.append(df)
 
