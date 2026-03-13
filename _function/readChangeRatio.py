@@ -9,8 +9,11 @@ class COL:
     road = [x.format("RoadsOnly") for x in __col]
     cols = all + EVCS + road
 
-def readChangeRatio(path: str, indexCity: bool = False) -> tuple[pd.DataFrame, type[COL]]:
-    df = pd.read_csv(path, encoding="utf-8", usecols=["city"] + COL.cols).dropna() #  + COL_GINI.cols
+def readChangeRatio(path: str, indexCity: bool = False, initial: bool = False) -> tuple[pd.DataFrame, type[COL]]:
+    df = pd.read_csv(
+        path, encoding="utf-8",
+        usecols=["city"] + COL.cols + ["A_All", "A_POIAll"] if initial else []
+    ).dropna() #  + COL_GINI.cols
 
     if indexCity:
         return df.set_index("city"), COL

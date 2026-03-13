@@ -1,5 +1,6 @@
 import os, sys, warnings, gc
 import geopandas as gpd
+import pandas as pd
 import numpy as np
 import rasterio as rio
 from osmnx import convert
@@ -129,7 +130,7 @@ class EVCSIndicator:
         bar.close()
 
         # Save EVCS coverage geometry
-        interDf = gpd.pd.concat(intersections[:n], ignore_index=True)
+        interDf = pd.concat(intersections[:n], ignore_index=True)
         interDf = gpd.GeoDataFrame(interDf, crs=self.df.crs).drop_duplicates("geometry").reset_index()
         bar = tqdm(total=interDf.shape[0], desc="Saving EVCS coverage geometry", unit="city")
 
@@ -219,9 +220,11 @@ class EVCSIndicator:
     def road(self, roadRoot: str, evcs: str | tuple[str, str] | gpd.GeoDataFrame, maxThread:int = 1) -> None:
         self.df["roadLength"] = np.nan
         self.df["roadDensity"] = np.nan
-        self.df["roadCoverage"] = np.nan
-        self.df["roadsLengthChange"] = np.nan
-        self.df["roadConnectivity"] = np.nan # Graph Density
+        # self.df["roadCoverage"] = np.nan
+        # self.df["roadsLengthChange"] = np.nan
+        # self.df["roadConnectivity"] = np.nan # Graph Density
+        self.df["EVCSConnectivity"] = np.nan
+        self.df["EVCSPop"] = np.nan
 
         evcs = self.__readFile(evcs, ["level1"])
         iso3 = self.df["iso3"].unique().tolist()
@@ -234,7 +237,7 @@ class EVCSIndicator:
             bar.set_description(f"Reading file for {country}")
             road = os.path.join(roadRoot, "{}.gpkg".format(country))
             roadDf = self.__readFile((road, "edges"), usecoles=["length", "affected", 'u', 'v', "key"], index=["city"])
-            roadNode = self.__readFile((road, "nodes"), usecoles=['x', 'y'], index=["osmid"])
+            roadNode = self.__readFile((road, "nodes"), usecoles=['x', 'y', "EVCSNum", "population_All"], index=["osmid"])
             if roadDf.crs != self.df.crs: roadDf.to_crs(self.df.crs, inplace=True) # type: ignore
 
             subDf: gpd.GeoDataFrame = self.df.loc[self.df["iso3"] == country]
@@ -245,10 +248,10 @@ class EVCSIndicator:
                 area = getattr(row, "area")
                 boundary: BaseGeometry = getattr(row, "geometry")
                 roads: gpd.GeoDataFrame = roadDf.loc[idx]
-                roadsNodes = roadNode[roadNode.index.isin(gpd.pd.unique(roads[["u", "v"]].values.ravel('K')))]
+                roadsNodes = roadNode[roadNode.index.isin(pd.unique(roads[["u", "v"]].values.ravel('K')))]
 
                 future = executor.submit(
-                    self._singleRoad, roads, area, boundary, roadsNodes, subEVCS
+                    self._singleRoad, roads, area, roadsNodes, # boundary/subEVCS
                 )
                 futures.append(future)
                 futuresDict[future] = idx
@@ -263,10 +266,12 @@ class EVCSIndicator:
                 raise RuntimeError(e)
             else:
                 self.df.at[idx, "roadDensity"] = resutls[0]
-                self.df.at[idx, "roadCoverage"] = resutls[1]
-                self.df.at[idx, "roadLength"] = resutls[2]
-                self.df.at[idx, "roadsLengthChange"] = resutls[3]
-                self.df.at[idx, "roadConnectivity"] = resutls[4]
+                self.df.at[idx, "roadLength"] = resutls[1]
+                # self.df.at[idx, "roadCoverage"] = resutls[2]
+                # self.df.at[idx, "roadsLengthChange"] = resutls[3]
+                # self.df.at[idx, "roadConnectivity"] = resutls[4]
+                self.df.at[idx, "EVCSConnectivity"] = resutls[2]
+                self.df.at[idx, "EVCSPop"] = resutls[3]
                 bar.update()
         
         bar.close()
@@ -277,48 +282,61 @@ class EVCSIndicator:
     @staticmethod
     def _singleRoad(
         roads: gpd.GeoDataFrame,
-        area: np.floating, boundary: BaseGeometry,
+        area: np.floating, # boundary: BaseGeometry,
         roadsNodes: gpd.GeoDataFrame,
-        subEVCS: gpd.GeoDataFrame
+        # subEVCS: gpd.GeoDataFrame
     ) -> tuple:
         if roads.shape[0] == 0:
-            return 0, 0, 0, 0, 0, 0
+            return 0, 0, 0, 0
         else:
             length = roads["length"].sum() / 1000
 
             # Roads density
             roadDensity = length / area * 1000000 # km/km2
 
-            # Coverage
-            roadsBuffer = roads.geometry.buffer(0.01).union_all()
-            intersection = roadsBuffer.intersection(boundary)
-            roadCoverage = intersection.area / boundary.area
-            del roadsBuffer, intersection
-            gc.collect()
+            # # Coverage
+            # roadsBuffer = roads.geometry.buffer(0.01).union_all()
+            # intersection = roadsBuffer.intersection(boundary)
+            # roadCoverage = intersection.area / boundary.area
+            # del roadsBuffer, intersection
+            # gc.collect()
 
-            # Roads length change
-            if subEVCS.shape[0] == 0:
-                roadsLengthChange = np.nan
-            else:
-                buffer = subEVCS.geometry.buffer(0.01).union_all()
-                roadsAroundEVCS = roads.iloc[roads.sindex.query(buffer, predicate="intersects")]
-                lengthAfter = roadsAroundEVCS.loc[roadsAroundEVCS["affected"] == 0, "length"].sum()
-                lengthBefor = roadsAroundEVCS["length"].sum()
-                roadsLengthChange = (lengthAfter - lengthBefor) / lengthBefor * 100 if lengthBefor > 0 else 0
-                del buffer, roadsAroundEVCS
+            # # Roads length change
+            # if subEVCS.shape[0] == 0:
+            #     roadsLengthChange = np.nan
+            # else:
+            #     buffer = subEVCS.geometry.buffer(0.01).union_all()
+            #     roadsAroundEVCS = roads.iloc[roads.sindex.query(buffer, predicate="intersects")]
+            #     lengthAfter = roadsAroundEVCS.loc[roadsAroundEVCS["affected"] == 0, "length"].sum()
+            #     lengthBefor = roadsAroundEVCS["length"].sum()
+            #     roadsLengthChange = (lengthAfter - lengthBefor) / lengthBefor * 100 if lengthBefor > 0 else 0
+            #     del buffer, roadsAroundEVCS
 
-            # roadConnectivity, by graph density (edge count / [node count * (node count - 1)])
-            roadConnectivity = density(
-                convert.graph_from_gdfs(
-                    roadsNodes,
-                    roads.set_index(["u", "v", "key"])
-                )
-            )
+            # # roadConnectivity, by graph density (edge count / [node count * (node count - 1)])
+            # roadConnectivity = density(
+            #     convert.graph_from_gdfs(
+            #         roadsNodes,
+            #         roads.set_index(["u", "v", "key"])
+            #     )
+            # )
 
-        del roads
+            # Average road counts per EVCS
+            nodesWithEVCS = roadsNodes[roadsNodes["EVCSNum"] != 0][["EVCSNum", "population_All"]] # index is osmid
+            evcsSum = nodesWithEVCS["EVCSNum"].sum()
+            ## Get edges counts for each nodes
+            roadCount = pd.concat([roads['u'], roads['v']]).value_counts() # index is osmid
+            ## Link road counts
+            mergerd = nodesWithEVCS[["EVCSNum"]].join(roadCount.rename("roadCount"), how="left").fillna(0)
+            EVCSConnectivity = (mergerd["EVCSNum"] * mergerd["roadCount"]).sum() / evcsSum if evcsSum != 0 else 0
+
+            # Per capita number of EVCS
+            popSum = nodesWithEVCS["population_All"].sum()
+            EVCSPop = evcsSum / popSum if popSum != 0 else evcsSum
+
+        del roads, nodesWithEVCS, mergerd
         gc.collect()
 
-        return roadDensity, roadCoverage, length, roadsLengthChange, roadConnectivity
+        return roadDensity, length, EVCSConnectivity, EVCSPop
     
     def population(self, rasterRoot: str, maxThread: int = 1) -> None:
         # Density
@@ -400,8 +418,8 @@ if __name__ == "__main__":
     SAVE_PATH = r"E:\Population_Related"
     
     a = EVCSIndicator(CITY_RESULT, (GEO_DB, "GAUL_2024_L2"), (r"C:\\0_PolyU\\test\\indicator.gpkg", "city"))
-    a.EVCS(EVCS, 32)
-    # a.road(DOWN_ROAD, EVCS, 8)
+    # a.EVCS(EVCS, 32)
+    a.road(DOWN_ROAD, EVCS, 32)
     # a.population(os.path.join(SAVE_PATH, "population_All"), 16)
     # a.flooding(r"E:\Flooding_Related\flooding\floodingArea.shp")
     a.save()

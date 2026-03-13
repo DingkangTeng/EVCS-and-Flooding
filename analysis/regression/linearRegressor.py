@@ -14,6 +14,7 @@ from _plot import plt, BAR_COLORS, NOTE_SIZE
 STAND_NAME = {
     "EVCScoverage": "EVCS Coverage",
     "folldingCoverage": "Flooding Coverage",
+    "EVCSChange": "EVCS Change"
 }
 
 class linearRegressor(autoCorrelation):
@@ -46,7 +47,7 @@ class linearRegressor(autoCorrelation):
             equationText += f"+ {results.params[var]:.4f} × {var} "
 
         ## Model evaluation text
-        statsText = f"Model Evaluation:\n"
+        statsText = ""
         statsText += f"R² = {results.rsquared:.4f}\n"
         statsText += f"Adjusted R² = {results.rsquared_adj:.4f}\n"
         statsText += f"F-statistic = {results.fvalue:.2f}\n"
@@ -60,10 +61,10 @@ class linearRegressor(autoCorrelation):
             coefText += f"\n{var}: β={results.params[var]:.4f}, p={p:.4f} ({significanceStars.sign(p)})"
 
         ## Add text
-        print(equationText + "\n" + coefText + "\n" + statsText)
+        print(equationText + "\n" + coefText + "\nModel Evaluation:\n" + statsText)
 
         # variable importance bar chart
-        ax3 = axs[0]
+        ax0 = axs[0]
         coefValues = model_scaled.coef_
         if coefValues.ndim > 1:
             coefValues = coefValues.flatten()
@@ -71,25 +72,27 @@ class linearRegressor(autoCorrelation):
 
         ## Bars
         colors = BAR_COLORS[0][:len(self.X_COL)]
-        bars = ax3.bar(self.X_COL, coefAbs, color=colors, alpha=0.8, edgecolor="black", linewidth=1.2)
+        bars = ax0.bar(self.X_COL, coefAbs, color=colors, alpha=0.8, edgecolor="black", linewidth=1.2)
 
         ## Add value labels on bars
         for i, (bar, coef) in enumerate(zip(bars, coefValues)):
             height = bar.get_height()
-            ax3.text(
+            ax0.text(
                 bar.get_x() + bar.get_width()/2., height + 0.01,
                 f"{coef:.4f} ({significanceStars.sign(results.pvalues[self.X_COL[i]])})",
                 ha="center", va="bottom", fontsize=NOTE_SIZE, fontweight="bold"
             )
 
-        ax3.set_ylabel("Absolute standardized coefficient")
+        ax0.set_ylabel("Absolute Standardized Coefficient")
+        ax0.set_xticks(range(len(self.X_COL)))
+        ax0.set_xticklabels([STAND_NAME[x] for x in self.X_COL])
 
         # Residual analysis scatter plot
-        ax4 = axs[1]
+        ax1 = axs[1]
         residuals = y - yPred
 
         ## Scatter plot with residuals as color
-        scatter = ax4.scatter(
+        scatter = ax1.scatter(
             yPred, y, c=residuals,
             cmap="coolwarm_r", alpha=0.7, edgecolors='k', linewidth=0.5, s=60
         )
@@ -97,17 +100,18 @@ class linearRegressor(autoCorrelation):
         # Add y=x reference line
         minVal = min(y.min(), yPred.min())
         maxVal = max(y.max(), yPred.max())
-        ax4.plot([minVal, maxVal], [minVal, maxVal], 'k--', linewidth=1.5, label="y=x Reference")
+        ax1.plot([minVal, maxVal], [minVal, maxVal], 'k--', linewidth=1.5, label="y=x Reference")
 
         # Add colorbar and labels and r2
-        cbar = plt.plt.colorbar(scatter, ax=ax4)
+        cbar = plt.plt.colorbar(scatter, ax=ax1)
         cbar.set_label("Residuals")
-        ax4.set_xlabel("Predicted EVCS change")
-        ax4.set_ylabel("Actual EVCS change")
-        ax4.text(
+        yColsName = " & ".join([STAND_NAME[y] for y in self.Y_COL])
+        ax1.set_xlabel("Predicted {}".format(yColsName))
+        ax1.set_ylabel("Actual {}".format(yColsName))
+        ax1.text(
             0.05, 0.95,
-            f'R² = {results.rsquared:.4f}',
-            transform=ax4.transAxes,
+            statsText,
+            transform=ax1.transAxes,
             fontsize=NOTE_SIZE, verticalalignment="top",
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
         )
@@ -122,7 +126,7 @@ class linearRegressor(autoCorrelation):
 
         # 4. 打印简单解释
         print("\n" + "=" * 70)
-        print("Resutlt Explanation:")
+        print("Results Explanation:")
         print("=" * 70)
         i = 1
         for var in self.X_COL:
