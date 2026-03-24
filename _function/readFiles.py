@@ -11,7 +11,7 @@ class newList(list):
 ## Make a floder
 def mkdir(savePath: str) -> None:
     if not os.path.exists(savePath):
-        os.mkdir(savePath)
+        os.makedirs(savePath)
 
     return
 

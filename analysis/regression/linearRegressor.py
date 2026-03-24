@@ -12,9 +12,9 @@ from analysis.__statisticalDiff import significanceStars
 from _plot import plt, BAR_COLORS, NOTE_SIZE
 
 STAND_NAME = {
-    "EVCScoverage": "EVCS Coverage",
-    "folldingCoverage": "Flooding Coverage",
-    "EVCSChange": "EVCS Change"
+    "EVCScoverage": "EVCS coverage",
+    "folldingCoverage": "Flooding coverage",
+    "EVCSChange": "EVCS change"
 }
 
 class linearRegressor(autoCorrelation):
@@ -83,7 +83,7 @@ class linearRegressor(autoCorrelation):
                 ha="center", va="bottom", fontsize=NOTE_SIZE, fontweight="bold"
             )
 
-        ax0.set_ylabel("Absolute Standardized Coefficient")
+        ax0.set_ylabel("Absolute standardized coefficient")
         ax0.set_xticks(range(len(self.X_COL)))
         ax0.set_xticklabels([STAND_NAME[x] for x in self.X_COL])
 

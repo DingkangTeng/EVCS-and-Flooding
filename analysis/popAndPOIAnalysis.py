@@ -38,7 +38,7 @@ def popAndPOIAnalysis(
     """
     A_BEFORE, A_AFTER = AColumns(analysisType, accOrEquity, 0)
 
-    df, _, _ = readNode(path, minEvcsNum, ignoreUneffected=True)
+    df, _, _ = readNode(path, minEvcsNum)
     scale = os.path.basename(path).split('.')[0]
     addCol = ["iso3", "city"] if scale == "city" else ["iso3"]
     df = df[A_BEFORE + A_AFTER + addCol]
@@ -106,8 +106,8 @@ def __accessibilityAnalysis(
         break
     
     ax1.legend()
-    ax1.set_xlabel("Change Ratio (%)")
-    ax1.set_ylabel("Cumulative Probability")
+    ax1.set_xlabel("Change ratio (%)")
+    ax1.set_ylabel("Cumulative probability")
     # ax1.yaxis.tick_right()
     # ax1.yaxis.set_label_position("right")
     
@@ -285,14 +285,14 @@ def __portionBar(
     
     ## Stacked horizontal bar
     if horizontal:
-        ax.barh(yPos, zeroPercent, height=0.6, label="Zero Values", alpha=0.7)
-        ax.barh(yPos, nonZeroPercent, height=0.6, left=zeroPercent, label="Non-zero Values", alpha=0.7)
+        ax.barh(yPos, zeroPercent, height=0.6, label="Zero values", alpha=0.7)
+        ax.barh(yPos, nonZeroPercent, height=0.6, left=zeroPercent, label="Non-zero values", alpha=0.7)
         ax.set_yticks(yPos)
         ax.set_yticklabels(ratio)
         ax.set_xlabel("Percentage (%)")
     else:
-        ax.bar(yPos, zeroPercent, width=0.6, label="Zero Values", alpha=0.7)
-        ax.bar(yPos, nonZeroPercent, width=0.6, bottom=zeroPercent, label="Non-zero Values", alpha=0.7)
+        ax.bar(yPos, zeroPercent, width=0.6, label="Zero values", alpha=0.7)
+        ax.bar(yPos, nonZeroPercent, width=0.6, bottom=zeroPercent, label="Non-zero values", alpha=0.7)
         ax.set_xticks(yPos)
         ax.set_xticklabels(ratio)
         ax.set_ylabel("Percentage (%)")

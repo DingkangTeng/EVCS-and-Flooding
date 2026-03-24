@@ -223,7 +223,8 @@ class EVCSIndicator:
         # self.df["roadCoverage"] = np.nan
         # self.df["roadsLengthChange"] = np.nan
         # self.df["roadConnectivity"] = np.nan # Graph Density
-        self.df["EVCSConnectivity"] = np.nan
+        self.df["EVCSConnectivity"] = np.nan # divided by totoal average connectivity
+        self.df["EVCSPopCover"] = np.nan
         self.df["EVCSPop"] = np.nan
 
         evcs = self.__readFile(evcs, ["level1"])
@@ -241,12 +242,12 @@ class EVCSIndicator:
             if roadDf.crs != self.df.crs: roadDf.to_crs(self.df.crs, inplace=True) # type: ignore
 
             subDf: gpd.GeoDataFrame = self.df.loc[self.df["iso3"] == country]
-            subEVCS: gpd.GeoDataFrame = evcs.loc[evcs["level1"] == country]
+            # subEVCS: gpd.GeoDataFrame = evcs.loc[evcs["level1"] == country]
 
             for row in subDf.itertuples():
                 idx = getattr(row, "Index")
                 area = getattr(row, "area")
-                boundary: BaseGeometry = getattr(row, "geometry")
+                # boundary: BaseGeometry = getattr(row, "geometry")
                 roads: gpd.GeoDataFrame = roadDf.loc[idx]
                 roadsNodes = roadNode[roadNode.index.isin(pd.unique(roads[["u", "v"]].values.ravel('K')))]
 
@@ -271,7 +272,8 @@ class EVCSIndicator:
                 # self.df.at[idx, "roadsLengthChange"] = resutls[3]
                 # self.df.at[idx, "roadConnectivity"] = resutls[4]
                 self.df.at[idx, "EVCSConnectivity"] = resutls[2]
-                self.df.at[idx, "EVCSPop"] = resutls[3]
+                self.df.at[idx, "EVCSPopCover"] = resutls[3]
+                self.df.at[idx, "EVCSPop"] = resutls[4]
                 bar.update()
         
         bar.close()
@@ -286,8 +288,9 @@ class EVCSIndicator:
         roadsNodes: gpd.GeoDataFrame,
         # subEVCS: gpd.GeoDataFrame
     ) -> tuple:
-        if roads.shape[0] == 0:
-            return 0, 0, 0, 0
+        rouadsCountsTotal = roads.shape[0]
+        if rouadsCountsTotal == 0:
+            return 0, 0, 0, 0, 0
         else:
             length = roads["length"].sum() / 1000
 
@@ -321,68 +324,82 @@ class EVCSIndicator:
             # )
 
             # Average road counts per EVCS
-            nodesWithEVCS = roadsNodes[roadsNodes["EVCSNum"] != 0][["EVCSNum", "population_All"]] # index is osmid
+            nodesWithEVCS = roadsNodes[roadsNodes["EVCSNum"] > 0][["EVCSNum", "population_All"]] # index is osmid
             evcsSum = nodesWithEVCS["EVCSNum"].sum()
             ## Get edges counts for each nodes
             roadCount = pd.concat([roads['u'], roads['v']]).value_counts() # index is osmid
             ## Link road counts
             mergerd = nodesWithEVCS[["EVCSNum"]].join(roadCount.rename("roadCount"), how="left").fillna(0)
-            EVCSConnectivity = (mergerd["EVCSNum"] * mergerd["roadCount"]).sum() / evcsSum if evcsSum != 0 else 0
+            nodesConnectivity = rouadsCountsTotal / roadsNodes.shape[0]
+            EVCSConnectivity = ((mergerd["EVCSNum"] * mergerd["roadCount"]).sum() / evcsSum) / nodesConnectivity if evcsSum != 0 else 0
 
-            # Per capita number of EVCS
-            popSum = nodesWithEVCS["population_All"].sum()
-            EVCSPop = evcsSum / popSum if popSum != 0 else evcsSum
+            # Ration of population where has EVCS and EVCS disparity
+            populationAll = roadsNodes["population_All"].fillna(0)
+            totalPopSum = populationAll.sum()
+            if totalPopSum == 0:
+                EVCSPopCover = 0
+                EVCSPop = 0
+            else:
+                # Ration of population where has EVCS
+                EVCSPopCover = nodesWithEVCS["population_All"].sum() / totalPopSum
+
+                # EVCS disparity
+                popDistribution: pd.Series = populationAll / totalPopSum
+                evcsNum = roadsNodes["EVCSNum"].fillna(0)
+                evcsDistribution: pd.Series = evcsNum / evcsNum.sum()
+                EVCSPop = np.abs(evcsDistribution - popDistribution).sum()
 
         del roads, nodesWithEVCS, mergerd
         gc.collect()
 
-        return roadDensity, length, EVCSConnectivity, EVCSPop
+        return roadDensity, length, EVCSConnectivity, EVCSPopCover, EVCSPop
     
-    def population(self, rasterRoot: str, maxThread: int = 1) -> None:
-        # Density
-        self.df["populationDensity"] = self.df["population_All"] / self.df["area"]
+    # def population(self, rasterRoot: str, maxThread: int = 1) -> None:
+    #     # Density
+    #     self.df["populationDensity"] = self.df["population_All"] / self.df["area"]
 
-        # Coverage
-        self.df["populationCV"] = np.nan
-        iso3 = self.df["iso3"].unique().tolist()
-        bar = tqdm(total=self.df.shape[0], desc="Calculating population coverage", unit="city")
+    #     # Coverage
+    #     self.df["populationCV"] = np.nan
+    #     iso3 = self.df["iso3"].unique().tolist()
+    #     bar = tqdm(total=self.df.shape[0], desc="Calculating population coverage", unit="city")
 
-        futures = []
-        lock = Lock()
-        with ThreadPoolExecutor(max_workers=maxThread) as executor:
-            for country in iso3:
-                subDf: gpd.GeoDataFrame = self.df.loc[self.df["iso3"] == country]
-                raster = os.path.join(rasterRoot, "{}_allGender_allAge_merge.tif".format(country))
-                futures.append(
-                    executor.submit(self.__popCoverage, subDf, raster, lock, bar)
-                )
+    #     futures = []
+    #     lock = Lock()
+    #     with ThreadPoolExecutor(max_workers=maxThread) as executor:
+    #         for country in iso3:
+    #             subDf: gpd.GeoDataFrame = self.df.loc[self.df["iso3"] == country]
+    #             raster = os.path.join(rasterRoot, "{}_allGender_allAge_merge.tif".format(country))
+    #             futures.append(
+    #                 executor.submit(self.__popCoverage, subDf, raster, lock, bar)
+    #             )
 
-        return
+    #     return
     
-    def __popCoverage(self, subDf: gpd.GeoDataFrame, rasterRoot: str, lock: Lock, bar: tqdm) -> None:
-        with rio.open(rasterRoot, options=["NUM_THREADS=ALL_CPUS"]) as pop:
-            for row in subDf.itertuples():
-                idx = getattr(row, "Index")
-                geom = getattr(row, "geometry")
+    # def __popCoverage(self, subDf: gpd.GeoDataFrame, rasterRoot: str, lock: Lock, bar: tqdm) -> None:
+    #     with rio.open(rasterRoot, options=["NUM_THREADS=ALL_CPUS"]) as pop:
+    #         for row in subDf.itertuples():
+    #             idx = getattr(row, "Index")
+    #             geom = getattr(row, "geometry")
 
-                raster, _ = mask(pop, [geom], crop=True, nodata=pop.nodata, all_touched=True)
-                values: np.ndarray = raster[0].flatten()
-                values = values[values != pop.nodata]
-                values = values[~np.isnan(values)]
+    #             raster, _ = mask(pop, [geom], crop=True, nodata=pop.nodata, all_touched=True)
+    #             values: np.ndarray = raster[0].flatten()
+    #             values = values[values != pop.nodata]
+    #             values = values[~np.isnan(values)]
 
-                # CV
-                with lock:
-                    if len(values) > 0:
-                        self.df.loc[idx, "populationCV"] = np.std(values) / np.mean(values)
-                    else:
-                        self.df.loc[idx, "populationCV"] = 0
+    #             # CV
+    #             with lock:
+    #                 if len(values) > 0:
+    #                     self.df.loc[idx, "populationCV"] = np.std(values) / np.mean(values)
+    #                 else:
+    #                     self.df.loc[idx, "populationCV"] = 0
                     
-                    bar.update()
+    #                 bar.update()
 
-        return
+    #     return
     
-    def flooding(self, floodingBinary: str) -> None:
-        self.df["folldingCoverage"] = np.nan
+    def flooding(self, floodingBinary: str, rasterRoot: str) -> None:
+        self.df["floodingCoverage"] = np.nan
+        self.df["floodingDisparity"] = np.nan
         bar = tqdm(total=self.df.shape[0], desc="Reading flooding area", unit="city")
 
         flooding = gpd.read_file(floodingBinary, encoding="utf-8")
@@ -390,20 +407,64 @@ class EVCSIndicator:
 
         bar.set_description("Calculating flooding coverage")
 
-        for row in self.df.itertuples():
-            idx = getattr(row, "Index")
-            boundary: BaseGeometry = getattr(row, "geometry")
+        for iso3, df in self.df.groupby("iso3"):
+            popRaster = os.path.join(
+                rasterRoot,
+                f"{iso3}_allGender_[0, 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90]_merge.tif"
+            )
 
-            # Coverage
-            possibleMatchesIdx = list(flooding.sindex.intersection(boundary.bounds))
-            if possibleMatchesIdx:
-                possibleMatches = flooding.iloc[np.array(possibleMatchesIdx)]
-                intersection = possibleMatches.intersection(boundary)
-                self.df.at[idx, "folldingCoverage"] = intersection.union_all().area / boundary.area
+            self._floodingByCountry(popRaster, df, flooding, bar)
+
+        return
+    
+    def _floodingByCountry(self, popRaster: str, df: pd.DataFrame, flooding: gpd.GeoDataFrame, bar: tqdm) -> None:
+        def getRaster(src, boundary: BaseGeometry, rasterBound: Polygon) -> np.ndarray:
+            if boundary.intersects(rasterBound):
+                raster = mask(src, [boundary], crop=True, nodata=src.nodata)
+                raster = raster[0].flatten()
+                raster = raster[raster != src.nodata]
             else:
-                self.df.at[idx, "folldingCoverage"] = 0
+                raster = np.empty(0)
+
+            return raster
         
-            bar.update()
+        with rio.open(popRaster, options=["NUM_THREADS=ALL_CPUS"]) as src:
+            rasterBound = box(*src.bounds)
+
+            for row in df.itertuples():
+                idx = getattr(row, "Index")
+                boundary: BaseGeometry = getattr(row, "geometry")
+
+                # Coverage
+                possibleMatchesIdx = list(flooding.sindex.intersection(boundary.bounds))
+                if possibleMatchesIdx:
+                    possibleMatches = flooding.iloc[np.array(possibleMatchesIdx)]
+                    intersection = possibleMatches.intersection(boundary)
+                    floodGeom = intersection.union_all()
+                    self.df.at[idx, "floodingCoverage"] = floodGeom.area / boundary.area
+                else:
+                    self.df.at[idx, "floodingCoverage"] = 0
+                    # self.df.at[idx, "floodingDisparity"] = np.nan
+                    bar.update()
+                    continue
+
+                # Disparity
+                raster = getRaster(src, boundary, rasterBound)
+                if raster.size == 0:
+                    pass
+                elif floodGeom.is_empty:
+                    self.df.at[idx, "floodingDisparity"] = 0 if np.nanmean(raster) != 0 else np.nan
+                else:
+                    avgPop = np.nanmean(raster)
+                    floodRaster = getRaster(src, floodGeom, rasterBound)
+                    if floodRaster.size == 0:
+                        self.df.at[idx, "floodingDisparity"] = 0.0 if avgPop != 0 else np.nan
+                    elif avgPop == 0:
+                        pass
+                    else:
+                        self.df.at[idx, "floodingDisparity"] = np.nanmean(floodRaster) / avgPop
+
+                bar.update()
 
         return
     
@@ -415,12 +476,14 @@ if __name__ == "__main__":
     GEO_DB = r"_GISAnalysis\Dissertation.gdb"
     EVCS = (r"C:\0_PolyU\global_EVCS.gpkg", "evcs")
     DOWN_ROAD = os.path.join(r"C:\0_PolyU", "roadsGraph")
-    SAVE_PATH = r"E:\Population_Related"
+    SAVE_PATH = r"D:\Population_Related\global_2025"
+    FLOOD_AREA = r"D:\Flooding_Related\flooding\floodingArea.shp"
     
     a = EVCSIndicator(CITY_RESULT, (GEO_DB, "GAUL_2024_L2"), (r"C:\\0_PolyU\\test\\indicator.gpkg", "city"))
     # a.EVCS(EVCS, 32)
-    a.road(DOWN_ROAD, EVCS, 32)
-    # a.population(os.path.join(SAVE_PATH, "population_All"), 16)
-    # a.flooding(r"E:\Flooding_Related\flooding\floodingArea.shp")
+    # a.road(DOWN_ROAD, EVCS, 16)
+    # a.save()
+    # a.population(os.path.join(a.save()SAVE_PATH, "population_All"), 16)
+    a.flooding(FLOOD_AREA, os.path.join(SAVE_PATH, "population_All"))
     a.save()
     # print(a.df.columns)
