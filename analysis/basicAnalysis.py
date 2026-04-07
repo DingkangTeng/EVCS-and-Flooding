@@ -2,13 +2,22 @@ import sys, os
 import numpy as np
 import seaborn as sns
 import pandas as pd
+import geopandas as gpd
 from matplotlib.axes import Axes
 
 sys.path.append(".") # Set path to the roots
 
 from _plot import plt, BAR_COLORS
 from analysis.__readNode import readNode
-from analysis.__setting import STAND_NAME
+
+_STAND_NAME = {
+    "EVCSNum": "EVCS count",
+    "EVCSChange": "EVCS change ratio (%)",
+    "EVCScoverage": "EVCS coverage ratio (%)",
+    "folldingCoverage": "Historical flooding area ratio (%)",
+    "A_All_change_all": "Pop.-based Acc.\nchange ratio (%)",
+    "A_POIAll_change_all": "Facility-based Acc.\nchange ratio (%)"
+}
 
 def EVCSChange(path: str, savePath: str = "", minEvcsNum: int = 0, nBins: int = 10, figsize: str = "D") -> pd.DataFrame:
     df, n, _ = readNode(path, minEvcsNum)
@@ -25,7 +34,7 @@ def EVCSChange(path: str, savePath: str = "", minEvcsNum: int = 0, nBins: int = 
     return df[[idx, "EVCSChange"]]
 
 def otherIndicator(
-    path: tuple[str, str],
+    path: str | tuple[str, str],
     indicators: list[str], idx: str = "city",
     axs: list[Axes] | None = None,
     EVCSChange: pd.DataFrame | None = None,
@@ -33,6 +42,7 @@ def otherIndicator(
     minEvcsNum: int = 0, nBins: int = 10, figsize: str = "D"
 ) -> None:
     df, _, _ = readNode(path, minEvcsNum)
+    df = gpd.GeoDataFrame(df) if isinstance(df, pd.DataFrame) else df
 
     if EVCSChange is not None and "EVCSChange" not in df.columns:
         df = df.merge(EVCSChange, left_on="city", right_on="city", how="left")
@@ -75,7 +85,7 @@ def __binPlot(
         stat="probability"
     )
 
-    ax.set_xlabel(STAND_NAME[col])
+    ax.set_xlabel(_STAND_NAME[col])
     
     # # Kernel Density Estimate
     # ax2 = ax.twinx()
@@ -110,8 +120,11 @@ if __name__ == "__main__":
     ANALY_RESULT_ROOT = r"C:\\0_PolyU\\test"
     CITY_RESULT = os.path.join(ANALY_RESULT_ROOT, "3km", "city.csv")
     INDICATOR = os.path.join(ANALY_RESULT_ROOT, "indicator.gpkg")
+    ANALY_RESULT = os.path.join(ANALY_RESULT_ROOT, "3km")
+    CHANGE_RESULT = os.path.join(ANALY_RESULT, "changeRatio_result.csv")
 
     EVCSchange = EVCSChange(CITY_RESULT, ANALY_RESULT_ROOT, figsize="S")
+    otherIndicator(CHANGE_RESULT, ["A_All_change_all", "A_POIAll_change_all"], EVCSChange=EVCSchange, figsize="S", savePath=ANALY_RESULT)
 
     from _plot import plt
     multiplots = plt.subplot("W", 1, 2, legend=False, sharey=True, keepyticks=True)

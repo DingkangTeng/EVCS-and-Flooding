@@ -224,6 +224,7 @@ class EVCSIndicator:
         # self.df["roadsLengthChange"] = np.nan
         # self.df["roadConnectivity"] = np.nan # Graph Density
         self.df["EVCSConnectivity"] = np.nan # divided by totoal average connectivity
+        self.df["EVCSRoadDens"] = np.nan
         self.df["EVCSPopCover"] = np.nan
         self.df["EVCSPop"] = np.nan
 
@@ -272,8 +273,9 @@ class EVCSIndicator:
                 # self.df.at[idx, "roadsLengthChange"] = resutls[3]
                 # self.df.at[idx, "roadConnectivity"] = resutls[4]
                 self.df.at[idx, "EVCSConnectivity"] = resutls[2]
-                self.df.at[idx, "EVCSPopCover"] = resutls[3]
-                self.df.at[idx, "EVCSPop"] = resutls[4]
+                self.df.at[idx, "EVCSRoadDens"] = resutls[3]
+                self.df.at[idx, "EVCSPopCover"] = resutls[4]
+                self.df.at[idx, "EVCSPop"] = resutls[5]
                 bar.update()
         
         bar.close()
@@ -290,7 +292,7 @@ class EVCSIndicator:
     ) -> tuple:
         rouadsCountsTotal = roads.shape[0]
         if rouadsCountsTotal == 0:
-            return 0, 0, 0, 0, 0
+            return 0, 0, 0, 0, 0, 0
         else:
             length = roads["length"].sum() / 1000
 
@@ -324,14 +326,21 @@ class EVCSIndicator:
             # )
 
             # Average road counts per EVCS
-            nodesWithEVCS = roadsNodes[roadsNodes["EVCSNum"] > 0][["EVCSNum", "population_All"]] # index is osmid
+            nodesWithEVCS = roadsNodes[roadsNodes["EVCSNum"] > 0][["EVCSNum", "population_All", "geometry"]] # index is osmid
             evcsSum = nodesWithEVCS["EVCSNum"].sum()
             ## Get edges counts for each nodes
             roadCount = pd.concat([roads['u'], roads['v']]).value_counts() # index is osmid
             ## Link road counts
             mergerd = nodesWithEVCS[["EVCSNum"]].join(roadCount.rename("roadCount"), how="left").fillna(0)
-            nodesConnectivity = rouadsCountsTotal / roadsNodes.shape[0]
-            EVCSConnectivity = ((mergerd["EVCSNum"] * mergerd["roadCount"]).sum() / evcsSum) / nodesConnectivity if evcsSum != 0 else 0
+            EVCSConnectivity = ((mergerd["EVCSNum"] * mergerd["roadCount"]).sum() / evcsSum) / roadCount.mean() if evcsSum != 0 else 0
+
+            # EVCS road density
+            if evcsSum != 0:
+                buffer = nodesWithEVCS.geometry.buffer(0.01).union_all()
+                roadsAroundEVCS = roads.iloc[roads.sindex.query(buffer, predicate="intersects")]
+                EVCSRoadDens = roadsAroundEVCS["length"].sum() / length
+            else:
+                EVCSRoadDens = 0
 
             # Ration of population where has EVCS and EVCS disparity
             populationAll = roadsNodes["population_All"].fillna(0)
@@ -352,7 +361,7 @@ class EVCSIndicator:
         del roads, nodesWithEVCS, mergerd
         gc.collect()
 
-        return roadDensity, length, EVCSConnectivity, EVCSPopCover, EVCSPop
+        return roadDensity, length, EVCSConnectivity, EVCSRoadDens, EVCSPopCover, EVCSPop
     
     # def population(self, rasterRoot: str, maxThread: int = 1) -> None:
     #     # Density
@@ -481,9 +490,9 @@ if __name__ == "__main__":
     
     a = EVCSIndicator(CITY_RESULT, (GEO_DB, "GAUL_2024_L2"), (r"C:\\0_PolyU\\test\\indicator.gpkg", "city"))
     # a.EVCS(EVCS, 32)
-    # a.road(DOWN_ROAD, EVCS, 16)
+    a.road(DOWN_ROAD, EVCS, 8)
     # a.save()
     # a.population(os.path.join(a.save()SAVE_PATH, "population_All"), 16)
-    a.flooding(FLOOD_AREA, os.path.join(SAVE_PATH, "population_All"))
+    # a.flooding(FLOOD_AREA, os.path.join(SAVE_PATH, "population_All"))
     a.save()
     # print(a.df.columns)

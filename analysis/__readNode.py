@@ -30,7 +30,7 @@ def readNode(
         df = gpd.read_file(path[0], layer=path[1], encoding="utf-8")
     
     # Ignore city with no EVCS
-    df = df[df["EVCSNum"] != 0]
+    df = df[df["EVCSNum"] != 0] if "EVCSNum" in df.columns else df
 
     n = df.shape[0]
     uniqueCountries = df["iso3"].unique()

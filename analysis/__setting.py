@@ -118,10 +118,6 @@ for a in A:
 
 # Plot standard name
 STAND_NAME = {
-    "EVCSNum": "EVCS count",
-    "EVCSChange": "EVCS change ratio (%)",
-    "EVCScoverage": "EVCS coverage ratio (%)",
-    "folldingCoverage": "Historical flooding area ratio (%)",
     "A_children_change": "children",
     "A_young_change": "young",
     "A_middle_change": "middle-\nage",

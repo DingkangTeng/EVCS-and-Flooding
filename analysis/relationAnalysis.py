@@ -14,18 +14,16 @@ from analysis.__setting import AColumns
 from analysis.__calRatio import calRatio
 
 _STAND_NAME = {
-    "A_All_change": "accessibility",
-    "A_2024_change": "accessibility",
-    "A_POIAll_change": "accessibility",
-    # "A_All_Gini_change": "Gini coefficient",
-    # "A_2024_Gini_change": "Gini coefficient",
-    # "A_POIAll_Gini_change": "Gini coefficient",
-    "EVCS_Change": "EVCS count",
-    "roadsLengthChange": "road length"
+    "A_All_change": "population-based resilience",
+    "A_2024_change": "resilience",
+    "A_POIAll_change": "facility-based resilience",
+    "A_All_Gini_change": "Gini coefficient",
+    "A_2024_Gini_change": "Gini coefficient",
+    "A_POIAll_Gini_change": "Gini coefficient"
 }
 
 class relationAnalysis:
-    __slots__ = ["df", "__relationDict", "continent", "scale", "savePath", "continentColors"]
+    __slots__ = ["df", "relationDict", "continent", "scale", "savePath", "continentColors"]
 
     def __init__(self, path: str, analysisType: str, savePath: str, minEvcsNum: int = 0) -> None:
         df, _, _ = readNode(path, minEvcsNum)
@@ -39,7 +37,7 @@ class relationAnalysis:
         self.scale = os.path.basename(path).split('.')[0]
         addCol = ["iso3", "city", "EVCSNum", "EVCS_Change"] if self.scale == "city" else ["iso3", "EVCSNum"]
         df = df[A_BEFORE + A_AFTER + addCol]
-        self.savePath = os.path.join(savePath, analysisType)
+        self.savePath = os.path.join(savePath, "pop" if analysisType == "popStatic" else "POI")
         if not os.path.exists(self.savePath): os.makedirs(self.savePath)
 
         df, ratio = calRatio(df, A_BEFORE, A_AFTER)
@@ -49,7 +47,7 @@ class relationAnalysis:
         self.df: pd.DataFrame = df.join(continent, on="iso3")
         self.df.dropna(inplace=True)
         self.df = self.df[(self.df[ratio[0]] > -99) & (self.df[ratio[1]] > -99)]
-        self.__relationDict = {
+        self.relationDict = {
             "accessibility": ratio[0],
             "equity": ratio[1],
             "evcs": "EVCS_Change",
@@ -123,7 +121,7 @@ class relationAnalysis:
         return result, correlation
 
     def __drawLine(self, ax: plt.Axes, x: str, y: str, corr: float, dfIn: pd.DataFrame | None = None) -> None:
-        df = self.df if dfIn is None else dfIn
+        df = self.df if dfIn is None else dfIn.dropna(subset=[x, y])
 
         ax.axhline(y=0, color="gray", linestyle="--", linewidth=0.8, alpha=0.7)
         ax.axvline(x=0, color="gray", linestyle="--", linewidth=0.8, alpha=0.7)
@@ -168,27 +166,27 @@ class relationAnalysis:
 
         return
     
-    @property
-    def legends(self) -> list:
+    def legends(self, byContinent: bool) -> list:
         legends = []
 
-        # Continent
-        legends.extend([
-            Patch(color=color, label=continent) 
-            for continent, color in self.continentColors.items()
-        ])
+        if byContinent:
+            # Continent
+            legends.extend([
+                Patch(color=color, label=continent) 
+                for continent, color in self.continentColors.items()
+            ])
 
-        # EVCS
-        smin = int(self.df["EVCSNum"].min())
-        smax = int(self.df["EVCSNum"].max() / 100) * 100
-        smid = int(((smin + smax) >> 1) / 100) * 100
-        sizes = [smin, smid, smax]
+            # EVCS
+            smin = int(self.df["EVCSNum"].min())
+            smax = int(self.df["EVCSNum"].max() / 100) * 100
+            smid = int(((smin + smax) >> 1) / 100) * 100
+            sizes = [smin, smid, smax]
 
-        for size in sizes:
-            legends.append(
-                scatter([], [], s=size/10, c="gray",
-                        linewidth=1, label=f"EVCS: {size}")
-            )
+            for size in sizes:
+                legends.append(
+                    scatter([], [], s=size/10, c="gray",
+                            linewidth=1, label=f"EVCS: {size}")
+                )
 
         # trends
         legends.append(
@@ -202,15 +200,17 @@ class relationAnalysis:
         self,
         relation: tuple[str, str] = ("accessibility", "evcs"),
         indicators: pd.DataFrame | None = None,
-        figsize: str = "W", ax: plt.Axes | None = None,
+        byContinent: bool = True,
+        standName: dict[str, str] | None = None,
+        figsize: str = "W", color: int = 0, ax: plt.Axes | None = None,
         saveFig: bool = False
     ) -> list:
-        fig = plt.Figure()
         if ax is None or saveFig: fig, ax = plt.figure(figsize)
+        STAND_NAME = _STAND_NAME if standName is None else standName
         
         # Plot, the point size is based on EVCS number
         result = ""
-        x, y = self.__relationDict[relation[0]], self.__relationDict[relation[1]]
+        x, y = self.relationDict[relation[0]], self.relationDict[relation[1]]
 
         # Add other indicators
         df = self.df if indicators is None else self.df.join(
@@ -218,106 +218,62 @@ class relationAnalysis:
         )
 
         rstr, corr = self.__outputInformation(x, y, df)
-        result += f"Relation ship between {_STAND_NAME.get(x)} and {_STAND_NAME.get(y)}:\n{rstr}"
+        result += f"Relation ship between {STAND_NAME.get(x)} and {STAND_NAME.get(y)}:\n{rstr}"
 
         for continent in self.continent:
             subset = df[df["continent"] == continent]
             ax.scatter(
                 x=subset[x],
                 y=subset[y],
-                s=subset["EVCSNum"] / 10, # Point size (Million)
-                c=self.continentColors[continent],
+                s=subset["EVCSNum"] / 10 if byContinent else None, # Point size (Million)
+                c=self.continentColors[continent] if byContinent else BAR_COLORS[0][color],
                 linewidth=1,
-                label=continent
+                label=continent if byContinent else None
             )
         
         self.__drawLine(ax, x, y, corr, df)
-        ax.set_xlabel("Change in {} (%)".format(_STAND_NAME.get(x, x)))
-        ax.set_ylabel("Change in {} (%)".format(_STAND_NAME.get(y, y)))
+        ax.set_xlabel("Change in {} (%)".format(STAND_NAME.get(x, x)))
+        ax.set_ylabel("Change in {} (%)".format(STAND_NAME.get(y, y)))
 
+        legend = self.legends(byContinent)
         if saveFig:
-            fig.legend(
-                handles=self.legends,
-                loc="lower center",
-                ncol=len(self.continent) + 1,
-                frameon=True,
-                fancybox=True,
-                borderpad=1,
-                labelspacing=0.5,
-                handletextpad=1,
-                columnspacing=1.5
-            )
-            plt.plot(self.savePath, f"{self.scale}_{x}&{y}.jpg")
+            # fig.legend(
+            #     handles=legend,
+            #     loc="lower center",
+            #     ncol=len(self.continent) + 1,
+            #     frameon=True,
+            #     fancybox=True,
+            #     borderpad=1,
+            #     labelspacing=0.5,
+            #     handletextpad=1,
+            #     columnspacing=1.5
+            # )
+            plt.plot(self.savePath, f"fig2_{self.scale}_{x}&{y}.jpg")
 
-        with open(os.path.join(self.savePath, f"{self.scale}_{x}&{y}.txt"), 'w') as f:
-            f.write(result)
+        # with open(os.path.join(self.savePath, f"{self.scale}_{x}&{y}.txt"), 'w') as f:
+        #     f.write(result)
 
-        return self.legends
-    
-    # def plotByContinent(
-    #     self,
-    #     relation: tuple[str, str] = ("accessibility", "equity"),
-    #     figsize: str = "W", axs: list[plt.Axes] | None = None
-    # ) -> list | None:
-    #     if axs is None:
-    #         multifig = plt.subplot(figsize, 2, len(self.continent) // 2, sharex=True, sharey=True)
-    #         axs = multifig.axs
-    #         multifig.fig.legend(
-    #             handles=self.legends,
-    #             loc="lower center",
-    #             ncol=len(self.continent) + 1,
-    #             frameon=True,
-    #             fancybox=True,
-    #             borderpad=1,
-    #             labelspacing=0.5,
-    #             handletextpad=1,
-    #             columnspacing=1.5
-    #         )
-    #     else: multifig = None
-    
-    #     x, y = self.__relationDict[relation[0]], self.__relationDict[relation[1]]
-
-    #     for i, continent in enumerate(self.continent):
-    #         subset = self.df[self.df["continent"] == continent].copy()
-    #         _, corr = self.__outputInformation(x, y, subset)
-
-    #         axs[i].scatter(
-    #             x=subset[x],
-    #             y=subset[y],
-    #             s=subset["EVCSNum"] / 10, # Point size (Million)
-    #             c=self.continentColors[continent],
-    #             linewidth=1,
-    #             label=continent
-    #         )
-            
-    #         self.__drawLine(axs[i], x, y, corr, subset)
-
-    #     xlabel = "Change in {} (%)".format(_STAND_NAME.get(x, x))
-    #     ylabel = "Change in {} (%)".format(_STAND_NAME.get(y, y))
-        
-    #     if multifig is not None:
-    #         multifig.fig.supxlabel(xlabel, y=0.17)
-    #         multifig.fig.supylabel(ylabel, y=0.6)
-    #         plt.plot(self.savePath, f"{self.scale}_ByContinent_{x}&{y}.jpg")
-    #         return
-        
-    #     else:
-    #         return self.legends
+        return legend
 
 if __name__ == "__main__":
     root = r"C:\\0_PolyU\\test"
     ANALY_RESULT = os.path.join(root, "3km")
     CITY_RESULT = os.path.join(ANALY_RESULT, "city.csv")
     INDICATOR = os.path.join(root, "indicator.gpkg")
-    # relationAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT).plotByContinent()
-    # relationAnalysis(CITY_RESULT, "POI", ANALY_RESULT).plotByContinent()
 
-    # # fig 3: relationship between accessibility and equity
+    # fig 2: relationship between accessibility and equity
+    pop = relationAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT)
+    poi = relationAnalysis(CITY_RESULT, "POI", ANALY_RESULT)
+    pop.plot(("accessibility", "equity"), byContinent=False, figsize="D", saveFig=True)
+    poi.relationDict["poiAcc"] = pop.relationDict["accessibility"]
+    poi.plot(("poiAcc", "accessibility"), indicators=pop.df[["city", "A_All_change"]], byContinent=False, figsize="D", color=3, saveFig=True)
+
+    # ## For dissertaion
     # from _plot import plt
     # figures = plt.subplot("W", 1, 2, legend=True, sharey=True)
     # axs = figures.axs
-    # legends = relationAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT).plot(("accessibility", "equity"), ax=axs[0])
-    # relationAnalysis(CITY_RESULT, "POI", ANALY_RESULT).plot(("accessibility", "equity"), ax=axs[1])
+    # legends = pop.plot(("accessibility", "equity"), ax=axs[0])
+    # poi.plot(("accessibility", "equity"), ax=axs[1])
     # axs[1].set_ylabel("")
 
     # figures.fig.legend(
@@ -331,31 +287,48 @@ if __name__ == "__main__":
     #     handletextpad=1,
     #     columnspacing=1.5
     # )
-    # plt.plot(ANALY_RESULT, "city_accessibility&equity.jpg")
+    # plt.plot(ANALY_RESULT, "dissertation_city_accessibility&equity.jpg", fig=figures.fig)
 
-    # fig 4: relationship between accessibility and EVCS change
+    # fig 3: relationship between accessibility and EVCS change
     from _plot import plt
     import geopandas as gpd
-    figures = plt.subplot("W", 1, 4, legend=True, sharey=True)
-    axs = figures.axs
-    legends = relationAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT).plot(("evcs", "accessibility"), ax=axs[0])
-    relationAnalysis(CITY_RESULT, "POI", ANALY_RESULT).plot(("evcs", "accessibility"), ax=axs[1])
 
-    # Accessibility and roads length change
+    standName = {
+        "A_All_change": "resilience",
+        "EVCS_Change": "EVCS count",
+        "roadsLengthChange": "road length"
+    }
+
+    figures = plt.subplot("W31", 2, 1, legend=False)
+    axs = figures.axs
+    legends = relationAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT).plot(("evcs", "accessibility"), standName=standName, ax=axs[0], byContinent=False)
+
     indicator = gpd.read_file(INDICATOR, layer="city")
-    relationAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT).plot(("roads", "accessibility"), ax=axs[2], indicators=indicator)
-    relationAnalysis(CITY_RESULT, "POI", ANALY_RESULT).plot(("roads", "accessibility"), ax=axs[3], indicators=indicator)
-    
-    figures.fig.legend(
-        handles=legends,
-        loc="lower center",
-        ncol=5,
-        frameon=True,
-        fancybox=True,
-        borderpad=1,
-        labelspacing=0.5,
-        handletextpad=1,
-        columnspacing=1.5
-    )
+    relationAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT).plot(("roads", "accessibility"), standName=standName, ax=axs[1], color=2, indicators=indicator, byContinent=False)
     
     plt.plot(ANALY_RESULT, "fig3_city_accessibility&EVCS&Road.jpg")
+
+    # # For dissertation
+    # figures = plt.subplot("WN32", 1, 4, legend=True, sharey=True)
+    # axs = figures.axs
+    # legends = relationAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT).plot(("evcs", "accessibility"), ax=axs[0], byContinent=False)
+    # relationAnalysis(CITY_RESULT, "POI", ANALY_RESULT).plot(("evcs", "accessibility"), ax=axs[1], byContinent=False)
+
+    # # Accessibility and roads length change
+    # indicator = gpd.read_file(INDICATOR, layer="city")
+    # relationAnalysis(CITY_RESULT, "popStatic", ANALY_RESULT).plot(("roads", "accessibility"), ax=axs[2], indicators=indicator, byContinent=False)
+    # relationAnalysis(CITY_RESULT, "POI", ANALY_RESULT).plot(("roads", "accessibility"), ax=axs[3], indicators=indicator, byContinent=False)
+    
+    # figures.fig.legend(
+    #     handles=legends,
+    #     loc="lower center",
+    #     ncol=5,
+    #     frameon=True,
+    #     fancybox=True,
+    #     borderpad=1,
+    #     labelspacing=0.5,
+    #     handletextpad=1,
+    #     columnspacing=1.5
+    # )
+    
+    # plt.plot(ANALY_RESULT, "dissertation_city_accessibility&EVCS&Road.jpg")

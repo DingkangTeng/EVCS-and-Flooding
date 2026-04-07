@@ -9,6 +9,7 @@ NOTE_SIZE = int(LABEL_SIZE * 0.7)
 @dataclass
 class __FIG_SIZE:
     D: tuple[int, int] = (12, 12)   # Default
+    DS: tuple[int, int] = (12, 9)
     D31: tuple[int, int] = (8, 8) # Default 1/3
     H: tuple[int, int] = (12, 24)   # High
     H31: tuple[int, int] = (12, 16) # Extra 1/3 High
@@ -17,7 +18,9 @@ class __FIG_SIZE:
     W31: tuple[int, int] = (8, 12)    # Wide 1/3
     W32: tuple[int, int] = (16, 12)    # Wide 2/3
     WN31: tuple[int, int] = (24, 10)    # Wide Narrow
+    WN32: tuple[int, int] = (24, 8)    # Wide Narrow 1/2
     S: tuple[int, int] = (6, 6)     # Small
+    S2: tuple[int, int] = (8, 15) # Special
 FIG_SIZE = __FIG_SIZE()
 
 # Boxplot color kwgs

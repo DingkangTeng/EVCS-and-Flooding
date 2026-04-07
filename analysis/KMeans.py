@@ -1,4 +1,4 @@
-import sys
+import sys, textwrap
 import pandas as pd
 import geopandas as gpd
 import numpy as np
@@ -6,43 +6,40 @@ import seaborn as sns
 import statsmodels.api as sm
 from matplotlib.ticker import PercentFormatter
 from sklearn.cluster import KMeans
-from sklearn.preprocessing import MinMaxScaler, StandardScaler, RobustScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import silhouette_score
 
 sys.path.append(".") # Set path to the roots
 
 from _function.readChangeRatio import readChangeRatio
 from _function.readFiles import mkdir
-from _plot import plt, BAR_COLORS
+from _plot import plt, BAR_COLORS, NOTE_SIZE
+from analysis.__statisticalDiff import significanceStars
 
 class clustering:
     __slots__ = [
-        "df", "COL", "cities",
-        "floodDf",
-        "Xscaled", "savePath"
-    ]
-
-    __CLUST_INDICATOR_COLS = [
-        "EVCSPop", "EVCSConnectivity"
+        "df", "COL", "cities", "clusterCols",
+        "savePath"
     ]
 
     # __CLUST_INDICATOR_COLS = [
-    #     "EVCSAggregation", "EVCSPopCover",
-    #     "roadDensity",
-    #     "floodingCoverage", "floodingDisparity"
+    #     "EVCSPop", "EVCSConnectivity"
     # ]
     
     __INDICATOR_COLS = [
-        "EVCSDensity", "EVCSAggregation",
-        "EVCSConnectivity", "EVCSPopCover", "EVCSPop"
+        "EVCScoverage","EVCSAggregation", 
+        "EVCSRoadDens", "EVCSConnectivity", 
+        "EVCSPopCover", "EVCSPop"
     ]
 
     __STAND_NAME = {
         "A_All_change_all": "Pop.-based accessibility change ratio (%)",
         "A_POIAll_change_all": "Facility-based accessibility change ratio (%)",
+        "EVCScoverage": "EVCS coverage (%)",
         "EVCSDensity": "EVCS Density",
         "EVCSAggregation": "EVCS aggregation (NNI)",
-        "EVCSConnectivity": "Average road counts per EVCS",
+        "EVCSConnectivity": "EVCS connectivity",
+        "EVCSRoadDens": "EVCS road density (%)",
         "EVCSPopCover": "EVCS-Pop. coverage",
         "EVCSPop": "EVCS-Pop. disparity",
         "roadDensity": "Road density (km/km²)",
@@ -50,45 +47,32 @@ class clustering:
         "floodingDisparity": "Flooding-Pop. disparity"
     }
 
-    def __init__(self, path: str, indicator: str, savePath: str) -> None:
+    def __init__(self, path: str, indicator: str, clusterCols: list[str], savePath: str) -> None:
         self.df, self.COL = readChangeRatio(path, indexCity=True, initial=True)
         indicatorDf = gpd.read_file(indicator, layer="city", encoding="utf-8").set_index("city")[
             list(self.__STAND_NAME.keys())[2:]
         ].dropna()
         self.df = self.df.join(indicatorDf).dropna()
-        
-        indicatorDf = indicatorDf[self.__CLUST_INDICATOR_COLS]
-        scaler = StandardScaler()
-        self.Xscaled = scaler.fit_transform(indicatorDf.to_numpy())
+        self.clusterCols = clusterCols
+
         self.cities = indicatorDf.index
         self.savePath = os.path.join(savePath, "clustering")
-
-        # Cluster flooding
-        floodingCols = ["floodingCoverage", "floodingDisparity"]
-        floodingDf = self.df[floodingCols]
-        scaler = StandardScaler()
-        Xscaled = scaler.fit_transform(floodingDf.to_numpy())
-        self.compareK(Xscaled=Xscaled, fileName="appendix_compare_K_flooding.jpg")
-        _, self.floodDf = self.__kmeans(3, Xscaled, floodingCols, "clustering_flooding")
-        self.df["flooding"] = self.floodDf["cluster"]
-
         mkdir(self.savePath)
 
         # # Correlation
         # from analysis.regression import autoCorrelation
         # autoCorrelation(self.df, self.__INDICATOR_COLS, [], True)
-
         del indicatorDf
 
         return
 
-    def compareK(
+    def __compareK(
         self,
-        maxTry: int = 10, Xscaled: np.ndarray | None = None, fileName: str = "appendix_compare_K.jpg"
+        Xscaled: np.ndarray,
+        maxTry: int = 10, fileName: str = "appendix_compare_K.jpg"
     ) -> None:
         plots = plt.subplot("W", 1, 2, legend=False)
         axs = plots.axs
-        Xscaled = self.Xscaled if Xscaled is None else Xscaled
 
         sse = []
         sil_scores = []
@@ -117,7 +101,8 @@ class clustering:
     def __kmeans(
         self,
         k: int, Xscaled: np.ndarray, cols: list[str],
-        saveName: str, index: pd.Index | None = None
+        saveName: str, index: pd.Index | None = None,
+        clusterNames: dict | None = None
     ) -> tuple[np.ndarray, pd.DataFrame]:
         kmeans = KMeans(n_clusters=k, random_state=42)
         labels = kmeans.fit_predict(Xscaled)
@@ -133,7 +118,7 @@ class clustering:
         # Clusting results
         row = 1 if total < 6 else 2
         col = 1 if total < 3 else 2 if total < 5 else 3
-        plots = plt.subplot("W" if col > 1 else "D", row, col)
+        plots = plt.subplot("W" if col > 1 else "W32", row, col)
         for i in range(0, row*col):
             ax = plots.axs[i]
             x = cols[2*i if total%2==0 else i]
@@ -142,20 +127,52 @@ class clustering:
                 data=df,
                 x=x, y=y,
                 ax=ax,
-                hue="cluster", palette="Set1"
+                hue="cluster", palette="Set1",
             )
+
             ax.set_xlabel(self.__STAND_NAME[x])
             ax.set_ylabel(self.__STAND_NAME[y])
-        plots.legend(title="Clustering number", ncol=k)
+        
+        handles, labels = plots.axs[0].get_legend_handles_labels()
+        labels = [f"Cluster {l}: {clusterNames[int(l)]}" for l in labels if l != "cluster"] if clusterNames is not None else labels
+        plots.legend(handles=handles, labels=labels, ncol=1) # , title="Clusters"
+
+        # Statistic
+        table = []
+        for c in clusters:
+            sub: pd.DataFrame = df[df["cluster"] == c]
+            table.append([
+                f"{c}",
+                f"{sub[cols[0]].mean():.2f}",
+                f"{sub[cols[1]].mean():.2f}",
+                f"{sub[cols[0]].median():.2f}",
+                f"{sub[cols[1]].median():.2f}"
+            ])
+        print("="*30 + " Clustering Result Statistic" + "="*30)
+        print(np.array(table))
+        print("="*70)
+
         plt.plot(self.savePath, "{}.jpg".format(saveName))
 
         return clusters, df
+    
+    def run(self, k: int, saveName: str, clusterNames: dict | None = None) -> None:
+        df = self.df[self.clusterCols]
+        scaler = StandardScaler()
+        Xscaled = scaler.fit_transform(df.to_numpy())
+        self.__compareK(Xscaled=Xscaled, fileName="appendix_compare_K_{}.jpg".format(saveName))
+        _, df = self.__kmeans(k, Xscaled, self.clusterCols, saveName, clusterNames=clusterNames)
+        self.df["flooding"] = df["cluster"]
+        
+        self.correlation()
+
+        return
     
     def classAcc(self, cols: list[str], content: str, k: int) -> pd.Series | pd.DataFrame:
         df = self.df[cols]
         scaler = StandardScaler()
         Xscaled = scaler.fit_transform(df.to_numpy())
-        self.compareK(Xscaled=Xscaled, fileName="appendix_compare_K_{}.jpg".format(content))
+        self.__compareK(Xscaled=Xscaled, fileName="appendix_compare_K_{}.jpg".format(content))
         _, df = self.__kmeans(k, Xscaled, cols, "clustering_{}".format(content))
 
         # Find the interval
@@ -169,14 +186,17 @@ class clustering:
     
     def __getChangeThres(self, col: str, changeThres: str) -> float:
         if changeThres == "cluster":
-            return self.classAcc([col], "pop", 2)[[col]].values[0]
+            return self.classAcc([col], col, 2)[[col]].values[0]
         elif changeThres == "mean":
             return self.df[self.df[col] != 0][col].mean()
         else:
             return self.df[self.df[col] != 0][col].median()
 
-    def run(self, k: int, changThres: str) -> None:
-        def generateDf(df: pd.DataFrame, x1: float, x2: float, savePath: str) -> None:
+    def groupAnalysis(self, changThres: str) -> None:
+        savePath = os.path.join(self.savePath, changThres)
+        mkdir(savePath)
+
+        def generateDf(df: pd.DataFrame, x1: float, x2: float, cluster: str, savePath: str) -> None:
             accResults = ["Pop Good", "Pop Bad", "Facility Good", "Facility Bad"]
             # Count profermance
             df["Pop Good"] = df["A_All_change_all"] > x1
@@ -185,11 +205,11 @@ class clustering:
             df["Facility Bad"] = df["A_POIAll_change_all"] <= x2
 
             grouped = df[
-                ["cluster"] + self.__CLUST_INDICATOR_COLS + accResults
-            ].groupby("cluster")
+                [cluster] + self.clusterCols + accResults
+            ].groupby(cluster)
             result = pd.concat(
                 [
-                    grouped[self.__CLUST_INDICATOR_COLS].agg(["mean", "median"]),
+                    grouped[self.clusterCols].agg(["mean", "median"]),
                     grouped.size().rename("count"),
                     grouped[accResults].sum(),
                     grouped[accResults].mean().mul(100).add_suffix("_prop")
@@ -198,63 +218,67 @@ class clustering:
             )
             result["pop-thres"] = x1
             result["facility-thres"] = x2
-            result.to_csv(savePath, float_format="%.4f")
+            result.to_csv(os.path.join(savePath, "flooding.csv"), float_format="%.4f")
 
             return
 
         # Count profermance
         x1 = self.__getChangeThres("A_All_change_all", changThres)
         x2 = self.__getChangeThres("A_POIAll_change_all", changThres)
-        generateDf(self.floodDf, x1, x2, os.path.join(self.savePath, "flooding_cluster_{}.csv".format(changThres)))
+        generateDf(self.df, x1, x2, "flooding", savePath)
 
-        for name, df in self.df.groupby("flooding"):
-            scaler = StandardScaler()
-            Xscaled = scaler.fit_transform(df[self.__CLUST_INDICATOR_COLS].to_numpy())
-            self.compareK(Xscaled=Xscaled, fileName="appendix_compare_K_{}".format(name))
-            clusters, df = self.__kmeans(
-                k, Xscaled, self.__CLUST_INDICATOR_COLS, "flooding_cluster_{}".format(name), df.index
-            )
+        grouped = self.df.groupby("flooding")
+        total = grouped.size()
 
-            newSave = os.path.join(self.savePath, "flooding_cluster_{}".format(name), changThres)
-            
-            mkdir(newSave)
+        # Results
+        for x in ["Pop", "Facility"]:
+            goodCol = "{} Good".format(x)
+            badCol = "{} Bad".format(x)
 
-            # Count profermance
-            generateDf(df, x1, x2, os.path.join(newSave, "clustering.csv"))
-            
-            # Different influence in different group
-            portionPlots = plt.subplot("W", 1, 2, sharey=True, sharex=True)
-            portionAxs = portionPlots.axs
+            # Radae
+            subplot = plt.subplot("WN32", 1, 3, legend=False, projection="polar")
+            axs = subplot.axs
+            for group, df in grouped:
+                good = df[df[goodCol]][self.__INDICATOR_COLS].mean().to_numpy()
+                bad = df[df[badCol]][self.__INDICATOR_COLS].mean().to_numpy()
+                ax = axs[int(group)] # type: ignore
+                self.__plotRadar(
+                    ax,
+                    good / bad - 1,
+                    self.__INDICATOR_COLS,
+                    BAR_COLORS[0][0],
+                    str(group)
+                )
+                ax.set_xlabel("Cluster {}".format(group))
+        
+            plt.plot(savePath, "indicator_{}".format(x), fig=subplot.fig)
 
-            for i, name in enumerate(("Population-based", "Facility-based")):
-                colEVCS = self.COL.EVCS[i]
-                colRoad = self.COL.road[i]
-                colAll = self.COL.all[i]
+            # Stacked
+            fig, ax = plt.figure("W31")
+            ratioGood = (grouped[goodCol].sum() / total * 100).fillna(0)
+            ratioBad  = (grouped[badCol].sum()  / total * 100).fillna(0)
+            groupLabels = ratioGood.index.astype(str)
+            ax.bar(groupLabels, ratioGood, label=f"{x} Good", color=BAR_COLORS[1][0])
+            ax.bar(groupLabels, ratioBad, bottom=ratioGood, label=f"{x} Bad", color=BAR_COLORS[1][1])
+            ax.set_xlabel("Flooding group")
+            ax.set_ylabel("Proportion of cities (%)")
+            ## Label
+            for i, (_, t) in enumerate(zip(groupLabels, total)):
+                goodVal = ratioGood[i]
+                badVal = ratioBad[i]
+                # Percentage label
+                if goodVal > 0:
+                    ax.text(i, goodVal / 2, f"{goodVal:.2f}%", ha="center", va="center", fontsize=NOTE_SIZE, color="black")
+                if badVal > 0:
+                    ax.text(i, goodVal + badVal / 2, f"{badVal:.2f}%", ha="center", va="center", fontsize=NOTE_SIZE, color="black")
+                # Total count label
+                ax.text(i, 102, f"n={t}", ha="center", va="bottom", fontsize=NOTE_SIZE)
 
-                df["diff"] = df[colEVCS].abs() - df[colRoad].abs()
-                df["winner"] = "road"
-                df.loc[df["diff"] > 0, "winner"] = "EVCS"
-                df.loc[df["diff"] == 0, "winner"] = "tie"
-
-                self.correlation(df.copy(), colAll)
-
-                # Plot
-                ax = portionAxs[i]
-                ## Cross table
-                ct = pd.crosstab(df["cluster"], df["winner"])
-                ct = ct.div(ct.sum(axis=1), axis=0)  # Normalize by row
-                ct.plot(kind="bar", stacked=True, ax=ax, color=BAR_COLORS[0])
-                ax.set_xlabel("Cluster")
-                ax.set_ylabel("Proportion (%)")
-                ax.yaxis.set_major_formatter(PercentFormatter(1.0, symbol=None))  # Change y axis to percentage
-
-            portionPlots.legend(ncol=k)
-            plt.plot(newSave, "clusting_portion", fig=portionPlots.fig)
+            plt.plot(savePath, "stakeed_{}".format(x), fig=fig)
             
         return
     
-    @staticmethod
-    def __plotRadar(ax: plt.Axes, data: np.ndarray, categories: list, color: str, label: str) -> None:
+    def __plotRadar(self, ax: plt.Axes, data: np.ndarray, categories: list, color: str, label: str) -> None:
         N = len(categories)
         angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
         data = np.concatenate((data, [data[0]]))  # Close data for radar
@@ -262,80 +286,84 @@ class clustering:
         ax.plot(angles, data, 'o-', linewidth=2, color=color, label=label)
         ax.fill(angles, data, alpha=0.25, color=color)
         ax.set_xticks(angles[:-1])
-        ax.set_xticklabels(categories)
+        ax.set_xticklabels([textwrap.fill(self.__STAND_NAME[x], width=10, break_long_words=False) for x in categories])
         ax.axhline(y=0, color="red")
         ax.set_ylim(-1, 1)
+        ax.set_yticks([-1, -0.5, 0, 0.5, 1])
+        ax.yaxis.set_major_formatter(PercentFormatter(1.0, symbol=None))  # Change y axis to percentage
+
+        return
+    
+    # Correlation
+    def correlation(self) -> None:
+        plots = plt.subplot("W", 1, 2, legend=True, sharey=True)
+        axs = plots.axs
+        for i, _ in enumerate(("Population-based", "Facility-based")):
+            colAll = self.COL.all[i]
+            df = self.df[["flooding", colAll] + self.__INDICATOR_COLS].copy()
+
+            self.__correlation(df, colAll, "flooding", axs[i])
+        
+        plots.legend(ncol=len(self.__INDICATOR_COLS)//2)
+        plt.plot(self.savePath, "correlation.jpg")
 
         return
 
-    def correlation(self, df: pd.DataFrame, yCol: str) -> None:
+    def __correlation(self, df: pd.DataFrame, yCol: str, cluster: str, ax: plt.Axes) -> None:
         results = {}
-        pvalues_dict = {}  # 存储每个簇的p值
-        indicators = self.__INDICATOR_COLS[1:]
+        pValues = {}
+        indicators = self.__INDICATOR_COLS[:]
 
         scaler = StandardScaler()
         df = df.copy()
         df.loc[:, indicators] = scaler.fit_transform(df[indicators])
         
-        for cluster_id in sorted(df['cluster'].unique()):
-            subset = df[df['cluster'] == cluster_id]
-            if len(subset) < len(indicators) + 5:  # 样本量过少时跳过或警告
-                print(f"警告：簇 {cluster_id} 样本量 {len(subset)} 偏少，结果可能不可靠")
+        for clusterID, subset in df.groupby(cluster):
+            # Not enough sample
+            if len(subset) < len(indicators) + 5:
+                print(f"Waring：Cluster {clusterID} do not have enough sample ({len(subset)}).")
             
             X = subset[indicators]
             y = subset[yCol]
             X = sm.add_constant(X)
             model = sm.OLS(y, X).fit()
-            results[cluster_id] = model
-            pvalues_dict[cluster_id] = model.pvalues[indicators]  # 只保留可调整指标的p值
+            results[clusterID] = model
+            pValues[clusterID] = model.pvalues[indicators]  # 只保留可调整指标的p值
             
-            print(f" --- Cluster {cluster_id} (n={len(subset)}) ---")
-            # 打印系数表（包含p值）
-            print(model.summary().tables[1])
+            print(f" --- Cluster {clusterID} (n={len(subset)}) ---")
+            print(model.summary())
 
-        # 提取系数和p值，构建DataFrame
-        coef_df = pd.DataFrame({cid: model.params[indicators] for cid, model in results.items()}).T
-        pval_df = pd.DataFrame(pvalues_dict).T
+        # Save and plot
+        coef = pd.DataFrame({cid: model.params[indicators] for cid, model in results.items()}).T
+        blank = 0.01 * (max(coef.max()) - min(coef.min()))
+        pValue = pd.DataFrame(pValues).T
         
-        # 绘图
-        fig, ax = plt.figure("D")
-        x = np.arange(len(coef_df.index))  # 簇的序号位置
-        width = 0.15  # 柱宽
+        # Plot
+        x = np.arange(len(coef.index))
+        width = 0.15
         
         for i, var in enumerate(indicators):
-            coeffs = coef_df[var].values
-            pvals = pval_df[var].values
-            # 判断显著性
-            sig_stars = []
-            for p in pvals:
-                if p < 0.001:
-                    sig_stars.append('***')
-                elif p < 0.01:
-                    sig_stars.append('**')
-                elif p < 0.05:
-                    sig_stars.append('*')
-                else:
-                    sig_stars.append('')
+            coeffs = np.array(coef[var].values)
+            pvals = pValue[var].values
+            # Drwa significant
+            sigStars = [significanceStars.sign(p) for p in pvals]
             
-            # 绘制柱子
-            bars = ax.bar(x + i*width, coeffs, width, label=var)
+            bars = ax.bar(x + i*width, coeffs, width, label=self.__STAND_NAME[var])
             
-            # 在柱子上方添加星号
-            for j, (bar, star) in enumerate(zip(bars, sig_stars)):
+            for bar, star in zip(bars, sigStars):
                 if star:
                     height = bar.get_height()
-                    ax.text(bar.get_x() + bar.get_width()/2., 
-                            height + 0.01 * (max(coef_df.max()) - min(coef_df.min())), 
-                            star, ha='center', va='bottom', fontsize=12, fontweight='bold')
+                    ax.text(
+                        bar.get_x() + bar.get_width()/2, height + blank if height >= 0 else height - 5*blank,
+                        star,
+                        ha="center", va="bottom",
+                        fontsize=NOTE_SIZE
+                    )
         
-        ax.axhline(0, color='black', linewidth=0.8, linestyle='--')
-        ax.set_xlabel('Cluster')
-        ax.set_ylabel('Coefficient')
-        ax.set_xticks(x + width * (len(indicators)-1)/2)
-        ax.set_xticklabels(coef_df.index)
-        ax.legend(loc='best')
-        
-        plt.plot(self.savePath, "correlation_{}.jpg".format(yCol), fig)
+        ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
+        ax.set_xlabel("Cluster")
+        ax.set_ylabel("Coefficient")
+        ax.set_xticks(x + width * (len(indicators)-1)/2, labels=coef.index)
         
         return
 
@@ -344,8 +372,15 @@ if __name__ == "__main__":
     ANALY_RESULT = r"C:\0_PolyU\test\3km"
     INDICATOR = r"C:\\0_PolyU\\test\\indicator.gpkg"
 
-    a = clustering(os.path.join(ANALY_RESULT, "changeRatio_result.csv"), INDICATOR, savePath=ANALY_RESULT)
-    # a.classAcc(["A_All_change_all", "A_POIAll_change_all"], "pop", 2) #"A_All"
-    a.run(k=3, changThres="cluster")
-    a.run(k=3, changThres="mean")
-    a.run(k=3, changThres="median")
+    cluster = clustering(os.path.join(ANALY_RESULT, "changeRatio_result.csv"), INDICATOR, clusterCols=["floodingCoverage", "floodingDisparity"], savePath=ANALY_RESULT)
+    cluster.run(
+        k=3, saveName="clustering_flooding",
+        clusterNames={
+            0: "Concentrated in population, Low flood coverage",
+            1: "Not concentrated in population, Low Flood Coverage",
+            2: "Not concentrated in population, High Flood Coverage"
+        }
+    ) # Cluster flooding
+    cluster.groupAnalysis(changThres="cluster")
+    cluster.groupAnalysis(changThres="mean")
+    cluster.groupAnalysis(changThres="median")

@@ -113,8 +113,8 @@ class subplot:
     def plot(self, path: str = "", saveName: str = "", **kwargs) -> None:
         plot(path, saveName, self.__fig, **kwargs)
 
-    def legend(self, loc: str = "lower center", **kwargs) -> None:
-        handles, labels = self.axs[0].get_legend_handles_labels()
+    def legend(self, handles: list | None = None, labels: list | None = None, loc: str = "lower center", **kwargs) -> None:
+        handles, labels = self.axs[0].get_legend_handles_labels() if handles is None or labels is None else (handles, labels)
         self.fig.legend(
             handles=handles,
             labels=labels,

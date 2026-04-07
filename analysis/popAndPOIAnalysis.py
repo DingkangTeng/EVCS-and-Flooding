@@ -55,6 +55,7 @@ def popAndPOIAnalysis(
     # Equity
     if accOrEquity == "accessibility":
         __accessibilityAnalysis(*results, scale, savePath)
+        __equityAnalysis(*results, analysisType, scale, savePath, forAcc=True,)
     else:
         __equityAnalysis(*results, analysisType, scale, savePath)
 
@@ -79,7 +80,6 @@ def __accessibilityAnalysis(
     # legends.extend(addLegend)
 
     ## non-0 ECDF
-    print(ratio)
     group: str
     i = 0
     for group in ratio:
@@ -134,26 +134,32 @@ def __accessibilityAnalysis(
 def __equityAnalysis(
     df: DataFrame, ratio: np.ndarray, zeroCounts: np.ndarray, nonZeroCounts: np.ndarray,
     analysisType: str, scale: str,
-    savePath: str
+    savePath: str, forAcc: bool = False,
 ) -> None:
-    # Plot
-    subplot = plt.subplot("H31", 2, 1, heightRatios=[2, 3])
-    ax1 = subplot.axs[0] # Proportion of zero bar
-    ax2 = subplot.axs[1] # Box plot
+    title = "accessibility" if forAcc else "equity"
     legends = []
-    
-    # Proportion of 0 bar
-    __portionBar(ax1, ratio, zeroCounts, nonZeroCounts)
 
-    # Add legends for portation bar
-    legends.extend(ax1.get_legend_handles_labels()[0])
+    # Plot
+    if forAcc:
+        fig, ax2 = plt.figure("D")
+    else:
+        subplot = plt.subplot("H31", 2, 1, heightRatios=[2, 3])
+        ax1 = subplot.axs[0] # Proportion of zero bar
+        ax2 = subplot.axs[1] # Box plot
+        fig = subplot.fig
+    
+        # Proportion of 0 bar
+        __portionBar(ax1, ratio, zeroCounts, nonZeroCounts)
+
+        # Add legends for portation bar
+        legends.extend(ax1.get_legend_handles_labels()[0])
 
     # Wilcoxon
     wilcoxon = Wilcoxon(
         ratio,
         df,
-        f"{analysisType} equity",
-        os.path.join(savePath, f"{scale}_equity_wilcoxon.csv") if savePath != "" else ""
+        f"{analysisType} {title}",
+        os.path.join(savePath, f"{scale}_{title}_wilcoxon.csv") if savePath != "" else ""
     )
 
     # Box plot
@@ -260,14 +266,15 @@ def __equityAnalysis(
     ax2.set_ylabel("Change ratio (%)")
     plt.standAxisName(ax2, 'x', STAND_NAME)
 
-    subplot.fig.legend(
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.008),
-        handles=legends,
-        ncol=6
-    )
+    if not forAcc:
+        fig.legend(
+            loc="lower center",
+            bbox_to_anchor=(0.5, -0.008),
+            handles=legends,
+            ncol=6
+        )
 
-    plt.plot(savePath, f"{scale}_equity.jpg")
+    plt.plot(savePath, f"{scale}_{title}.jpg")
 
     return
 

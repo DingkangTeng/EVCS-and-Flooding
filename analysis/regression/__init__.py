@@ -1,1 +1,2 @@
 from .autoCorrelation import autoCorrelation
+from .linearRegressor import linearRegressor

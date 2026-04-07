@@ -1,9 +1,11 @@
 import sys, os
 import geopandas as gpd
+import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
+from statsmodels.regression.linear_model import RegressionResultsWrapper
 
 sys.path.append(".") # Set path to the roots
 
@@ -19,7 +21,7 @@ STAND_NAME = {
 
 class linearRegressor(autoCorrelation):
     
-    def linearRegression(self, figsize: str = "WN31", savePath: str = "") -> None:
+    def linearRegression(self, figsize: str = "WN32", savePath: str = "") -> None:
         X = self.df[self.X_COL]
         y = self.df[self.Y_COL].to_numpy().flatten()
 
@@ -27,7 +29,7 @@ class linearRegressor(autoCorrelation):
         Xsm = sm.add_constant(X)
         model = sm.OLS(y, Xsm)
         results = model.fit()
-        yPred = results.predict(Xsm)
+        # yPred = results.predict(Xsm)
 
         # Calculate standardized coefficients for variable importance
         scaler = StandardScaler()
@@ -36,7 +38,7 @@ class linearRegressor(autoCorrelation):
         model_scaled = LinearRegression()
         model_scaled.fit(XScaled, yScaled)
         
-        multiplot = plt.subplot(figsize, 1, 2, widthRatios=[1, 1], legend=False)
+        multiplot = plt.subplot(figsize, 1, 3, widthRatios=[1, 1, 1], legend=False)
         axs = multiplot.axs
 
         # Regression equation and statistics summary
@@ -87,44 +89,42 @@ class linearRegressor(autoCorrelation):
         ax0.set_xticks(range(len(self.X_COL)))
         ax0.set_xticklabels([STAND_NAME[x] for x in self.X_COL])
 
-        # Residual analysis scatter plot
-        ax1 = axs[1]
-        residuals = y - yPred
+        self.partialDependece(results, self.X_COL[0], self.X_COL[1], axs[1], "blue")
+        self.partialDependece(results, self.X_COL[1], self.X_COL[0], axs[2], "red")
 
-        ## Scatter plot with residuals as color
-        scatter = ax1.scatter(
-            yPred, y, c=residuals,
-            cmap="coolwarm_r", alpha=0.7, edgecolors='k', linewidth=0.5, s=60
-        )
+        # ## Scatter plot with residuals as color
+        # scatter = ax1.scatter(
+        #     yPred, y, c=residuals,
+        #     cmap="coolwarm_r", alpha=0.7, edgecolors='k', linewidth=0.5, s=60
+        # )
 
-        # Add y=x reference line
-        minVal = min(y.min(), yPred.min())
-        maxVal = max(y.max(), yPred.max())
-        ax1.plot([minVal, maxVal], [minVal, maxVal], 'k--', linewidth=1.5, label="y=x Reference")
+        # # Add y=x reference line
+        # minVal = min(y.min(), yPred.min())
+        # maxVal = max(y.max(), yPred.max())
+        # ax1.plot([minVal, maxVal], [minVal, maxVal], 'k--', linewidth=1.5, label="y=x Reference")
 
-        # Add colorbar and labels and r2
-        cbar = plt.plt.colorbar(scatter, ax=ax1)
-        cbar.set_label("Residuals")
-        yColsName = " & ".join([STAND_NAME[y] for y in self.Y_COL])
-        ax1.set_xlabel("Predicted {}".format(yColsName))
-        ax1.set_ylabel("Actual {}".format(yColsName))
-        ax1.text(
-            0.05, 0.95,
-            statsText,
-            transform=ax1.transAxes,
-            fontsize=NOTE_SIZE, verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
-        )
+        # # Add colorbar and labels and r2
+        # cbar = plt.plt.colorbar(scatter, ax=ax1)
+        # cbar.set_label("Residuals")
+        # yColsName = " & ".join([STAND_NAME[y] for y in self.Y_COL])
+        # ax1.set_xlabel("Predicted {}".format(yColsName))
+        # ax1.set_ylabel("Actual {}".format(yColsName))
+        # ax1.text(
+        #     0.05, 0.95,
+        #     statsText,
+        #     transform=ax1.transAxes,
+        #     fontsize=NOTE_SIZE, verticalalignment="top",
+        #     bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+        # )
 
         plt.plot(savePath, "LinearRegression_Summary.jpg")
 
-        # 3. 打印详细的回归结果
+        # Print regression result
         print("=" * 70)
         print("Multiple Linear Regression Results:")
         print("=" * 70)
         print(results.summary())
 
-        # 4. 打印简单解释
         print("\n" + "=" * 70)
         print("Results Explanation:")
         print("=" * 70)
@@ -139,6 +139,53 @@ class linearRegressor(autoCorrelation):
             has a greater impact on change rate."
         )
 
+        return
+    
+    # def singleChange(self, results: RegressionResultsWrapper, var1: str, var2: str, ax: plt.Axes) -> None:
+    #     # 生成 var1 的取值范围
+    #     var_range = np.linspace(self.df[var1].min(), self.df[var1].max(), 100)
+    #     fixed_val = self.df[var2].mean()          # 固定 var2 为均值
+        
+    #     # 构建预测数据，显式包含常数项，并确保列顺序与模型一致（const, var1, var2）
+    #     n = len(var_range)
+    #     X_pred = pd.DataFrame({
+    #         'const': np.ones(n),          # 常数项列
+    #         var1: var_range,
+    #         var2: np.full(n, fixed_val)
+    #     })
+        
+    #     # 预测
+    #     y_pred = results.predict(X_pred)
+        
+    #     # 绘图
+    #     ax.plot(var_range, y_pred, 'b-', linewidth=2, label=f'{var2} = {fixed_val:.2f}')
+    #     ax.scatter(self.df[var1], self.df[self.Y_COL[0]],  # Y_COL 是列表，取第一个元素
+    #             color='gray', alpha=0.5, s=30, label='Actual data')
+    #     ax.set_xlabel(STAND_NAME.get(var1, var1))
+    #     ax.set_ylabel(f'Predicted {self.Y_COL[0]}')
+    #     ax.legend()
+    #     ax.grid(True, linestyle='--', alpha=0.6)
+
+    #     return
+
+    def partialDependece(self, results: RegressionResultsWrapper, xCol: str, fixCol: str, ax: plt.Axes, color: str) -> None:
+        x1 = np.linspace(self.df[xCol].min(), self.df[xCol].max(), 50)
+        # Original OSL model
+        const = results.params["const"]
+        b1 = results.params[xCol]
+        b2 = results.params[fixCol]
+        yPred = const + b1 * x1 + b2 * self.df[fixCol].mean()
+    
+        vals = np.linspace(self.df[xCol].min(), self.df[xCol].max(), 50)
+
+        # Real data points
+        ax.scatter(self.df[xCol], self.df[self.Y_COL], color="gray", alpha=0.5, s=10, label="Actual data")
+        # Partial dependence line
+        ax.plot(vals, yPred, 'b-', linewidth=2.5, label="Partial dependence", color=color)
+        ax.fill_between(vals, yPred, alpha=0.2, color=color)
+        ax.set_xlabel(STAND_NAME[xCol])
+        ax.set_ylabel(f"Predicted {STAND_NAME[self.Y_COL[0]]}")
+        
         return
 
 # Debug
