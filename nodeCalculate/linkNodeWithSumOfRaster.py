@@ -405,7 +405,7 @@ if __name__ == "__main__":
     #     os.cpu_count()  # type: ignore
     # )
 
-    # linkNodeWithSumOfRaster(maxThread=32).processAll(r"C:\\0_PolyU\\roadsGraph", r"D:\Population_Related\global_2025", r"population_Female", cache=False)
+    linkNodeWithSumOfRaster(maxThread=32).processAll(r"C:\\0_PolyU\\roadsGraph", r"D:\Population_Related\global_2025", r"population_Female", cache=False)
     linkNodeWithSumOfRaster(maxThread=32).processAll(r"C:\\0_PolyU\\roadsGraph", r"D:\Population_Related\global_2025", r"population_Male", cache=False)
 
     from analysis import mergeData, calUpperLevel

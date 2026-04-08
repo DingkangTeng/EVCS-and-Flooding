@@ -1,10 +1,10 @@
 import sys, os, threading, gc, shutil, psutil, time
 import pandas as pd
 import numpy as np
-try:
-    import cupy as np
-except Exception as e:
-    print(e, "Use CPU instead.")
+# try:
+#     import cupy as np
+# except Exception as e:
+#     print(e, "Use CPU instead.")
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 from osgeo import gdal
@@ -55,7 +55,7 @@ class populationMerge(floodingMerge):
 
     #     return
 
-    def mergeAll( # type: ignore
+    def mergeAll(
         self,
         savePath: str,
         mainAge: list[int] = ALL_AGE_LIST,
@@ -281,7 +281,7 @@ if __name__ == "__main__":
     DOWN_POP = r"D:\Population_Related\global_2025\population"
     SAVE_PATH = r"D:\Population_Related\global_2025"
     # populationMerge(DOWN_POP, blockSize=4096).mergeAll(os.path.join(SAVE_PATH, "population_All"), multiThread=4)
-    # populationMerge(DOWN_POP, blockSize=4096).mergeAll(os.path.join(SAVE_PATH, "population_Male"), gender=['m'], multiThread=8)
+    populationMerge(DOWN_POP, blockSize=4096).mergeAll(os.path.join(SAVE_PATH, "population_Male"), gender=['m'], multiThread=8)
     populationMerge(DOWN_POP, blockSize=4096).mergeAll(os.path.join(SAVE_PATH, "population_Female"), gender=['f'], multiThread=8)
     # # "children": <20, "young": 20-44, "middle": 45-59, "elderly">=60
     # ageGroup = {

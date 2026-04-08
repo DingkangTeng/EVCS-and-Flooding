@@ -31,9 +31,8 @@ def popAndPOIAnalysis(
 
     Parameters
     ----------
-    analysisType : {'POI', 'popStatic', 'popDynamic', 'pop'}
-        'POI' analysis the relationship between different POI. 'popStatic' analysis the relationship
-        between gender demograph, age demograph and all population. 'popDynamic' analysis the relatiopship
+    analysisType : {'POI', 'pop'}
+        'POI' analysis the relationship between different POI. 'pop' analysis the relatiopship
         between all static population and all dynaic population.
     """
     A_BEFORE, A_AFTER = AColumns(analysisType, accOrEquity, 0)
@@ -55,7 +54,7 @@ def popAndPOIAnalysis(
     # Equity
     if accOrEquity == "accessibility":
         __accessibilityAnalysis(*results, scale, savePath)
-        __equityAnalysis(*results, analysisType, scale, savePath, forAcc=True,)
+        __equityAnalysis(*results, analysisType, scale, savePath, forAcc=True)
     else:
         __equityAnalysis(*results, analysisType, scale, savePath)
 
@@ -127,7 +126,7 @@ def __accessibilityAnalysis(
         ncol=6
     )
 
-    plt.plot(savePath, f"{scale}_accessibility.jpg")
+    plt.plot(savePath, f"{scale}_accessibility_onlyTotal.jpg")
 
     return
 

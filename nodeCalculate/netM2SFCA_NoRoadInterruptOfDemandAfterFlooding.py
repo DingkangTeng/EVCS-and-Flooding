@@ -272,13 +272,13 @@ if __name__ == "__main__":
     # a.calOneLayer(1000, "Gaussian", "population_All") # type: ignore
     # a.calOneLayer(1000, "Gaussian", "population_All", after=True, maxThreads=os.cpu_count()) # type: ignore
     D0 = 3000
-    calAllLayer(r"C:\\0_PolyU\\roadsGraph", D0, "Gaussian")
+    calAllLayer(r"C:\\0_PolyU\\roadsGraph", D0, "Gaussian", ["population_Male", "population_Female"])
 
-    from analysis import mergeData, calUpperLevel
-    mergeData(
-        "C:\\0_PolyU\\roadsGraph", (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"), ("iso3_code", "disp_en"), D0
-    ).mergeAll("C:\\0_PolyU\\test")
+    # from analysis import mergeData, calUpperLevel
+    # mergeData(
+    #     "C:\\0_PolyU\\roadsGraph", (r"_GISAnalysis\\Dissertation.gdb", "GAUL_2024_L2"), ("iso3_code", "disp_en"), D0
+    # ).mergeAll("C:\\0_PolyU\\test")
 
-    ANALY_RESULT = r"C:\0_PolyU\test\3km"
-    MERGE_RESULT = r"C:\0_PolyU\test\merge_3km.parquet"
-    calUpperLevel(MERGE_RESULT, ANALY_RESULT, 10, "city").agg("city", 16)
+    # ANALY_RESULT = r"C:\0_PolyU\test\3km"
+    # MERGE_RESULT = r"C:\0_PolyU\test\merge_3km.parquet"
+    # calUpperLevel(MERGE_RESULT, ANALY_RESULT, 10, "city").agg("city", 16)
